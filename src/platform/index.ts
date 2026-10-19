@@ -2,7 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
 import { base64ToBytes, bytesToBase64, encodeUtf8 } from '../model/util';
-import { NetworkError, type HttpRequest, type HttpResponse, type Platform } from './types';
+import { NetworkError, type ClipboardContent, type HttpRequest, type HttpResponse, type Platform } from './types';
 
 /** API exposed by electron/preload.ts */
 export interface ElectronBridge {
@@ -13,6 +13,8 @@ export interface ElectronBridge {
   secureGet(key: string): Promise<string | null>;
   secureSet(key: string, value: string | null): Promise<void>;
   onFocus(cb: () => void): void;
+  clipboardRead(): Promise<{ text: string; image: Uint8Array | null }>;
+  clipboardWriteText(text: string): Promise<void>;
   os: string;
   version: string;
 }
@@ -21,6 +23,12 @@ declare global {
   interface Window {
     nextnoteNative?: ElectronBridge;
   }
+}
+
+interface NativeClipboardPlugin {
+  info(): Promise<{ hasClip: boolean; timestamp: number }>;
+  read(): Promise<{ text?: string; imageBase64?: string; imageType?: string }>;
+  writeText(opts: { text: string }): Promise<void>;
 }
 
 interface NativeHttpPlugin {
@@ -54,11 +62,17 @@ function electronPlatform(bridge: ElectronBridge): Platform {
     secureGet: (k) => bridge.secureGet(k),
     secureSet: (k, v) => bridge.secureSet(k, v),
     onResume: (cb) => bridge.onFocus(cb),
+    async readClipboard() {
+      const c = await bridge.clipboardRead();
+      return { text: c.text || null, image: c.image ? new Blob([c.image as BlobPart], { type: 'image/png' }) : null };
+    },
+    writeClipboardText: (text) => bridge.clipboardWriteText(text),
   };
 }
 
 function androidPlatform(): Platform {
   const NativeHttp = registerPlugin<NativeHttpPlugin>('NativeHttp');
+  const NativeClipboard = registerPlugin<NativeClipboardPlugin>('NativeClipboard');
   return {
     kind: 'android',
     deviceName: 'NextNote (Android)',
@@ -110,6 +124,20 @@ function androidPlatform(): Platform {
         if (!handler()) void App.minimizeApp();
       });
     },
+    async readClipboard() {
+      const r = await NativeClipboard.read();
+      const image = r.imageBase64 ? new Blob([base64ToBytes(r.imageBase64) as BlobPart], { type: r.imageType ?? 'image/png' }) : null;
+      return { text: r.text ?? null, image };
+    },
+    async writeClipboardText(text) {
+      await NativeClipboard.writeText({ text });
+    },
+    async clipboardChangedSince(time) {
+      const info = await NativeClipboard.info();
+      if (!info.hasClip) return false;
+      if (!info.timestamp) return null;
+      return info.timestamp > time;
+    },
   };
 }
 
@@ -156,7 +184,30 @@ function webPlatform(): Platform {
         if (document.visibilityState === 'visible') cb();
       });
     },
+    readClipboard: readWebClipboard,
+    async writeClipboardText(text) {
+      await navigator.clipboard.writeText(text);
+    },
   };
+}
+
+async function readWebClipboard(): Promise<ClipboardContent> {
+  const out: ClipboardContent = { text: null, image: null };
+  try {
+    for (const item of await navigator.clipboard.read()) {
+      const imageType = item.types.find((t) => t.startsWith('image/'));
+      if (imageType && !out.image) out.image = await item.getType(imageType);
+      if (item.types.includes('text/plain') && out.text === null) out.text = await (await item.getType('text/plain')).text();
+    }
+    return out;
+  } catch {
+    try {
+      out.text = await navigator.clipboard.readText();
+    } catch {
+      // no permission
+    }
+    return out;
+  }
 }
 
 function detect(): Platform {

@@ -50,6 +50,7 @@ Alternativ: Reiter „App-Passwort“ mit Benutzername und einem in Nextcloud er
 | Radieren | S-Pen-Seitentaste gedrückt halten, oder Werkzeug **Radierer** (nochmal tippen → Modus/Größe) |
 | Auswählen | **Lasso** im Reiter Zeichnen; mit der Maus im Textmodus ein Rechteck aufziehen oder einen Strich anklicken. Auswahl ziehen = verschieben, runder Griff = skalieren |
 | Scrollen / Zoomen | Finger ziehen / zwei Finger spreizen; am PC Mausrad und Strg+Mausrad |
+| Kopieren & Einfügen | Auswahl (Lasso oder Antippen) → **Kopieren** in der Leiste über der Auswahl. Einfügen am Tablet: **lange mit dem Finger auf eine freie Stelle drücken → Einfügen** (landet genau dort); am PC Rechtsklick oder Strg+V; überall auch **Einfügen → Einfügen** im Menüband. Eingefügt wird immer das zuletzt Kopierte – auch Text oder Bilder aus anderen Apps |
 | PDF beschriften | **Einfügen → PDF-Ausdruck** (oder PDF auf die Seite ziehen) |
 | Seite/Abschnitt verschieben | Ziehen (am Tablet am Griff ⠿) oder Kontextmenü „…“ → *Verschieben nach …* |
 | Unterseite | Kontextmenü einer Seite → *Tiefer stufen* oder Tab-Taste in der Seitenliste |
@@ -95,7 +96,7 @@ Aufbau:
 - `src/ink` – Stifteingabe, Gesten (Stift/Finger/Maus, Handballenerkennung, Zoom), Radierer, Lasso
 - `src/ui`, `src/editor` – Oberfläche (React), Rich-Text-Editor (TipTap)
 - `electron/` – Windows-Hülle (HTTP über den Hauptprozess, Passwort per Windows-DPAPI verschlüsselt)
-- `android/` – Capacitor-Projekt mit eigenem OkHttp-Plugin `NativeHttpPlugin` (WebDAV-Methoden wie PROPFIND/MKCOL sind mit dem Standard-HTTP von Capacitor nicht möglich)
+- `android/` – Capacitor-Projekt mit eigenen Plugins: `NativeHttpPlugin` (OkHttp; WebDAV-Methoden wie PROPFIND/MKCOL sind mit dem Standard-HTTP von Capacitor nicht möglich) und `NativeClipboardPlugin` (Zwischenablage inkl. Bildern; erkennt am Zeitstempel, ob zuletzt in einer anderen App kopiert wurde)
 
 ### Signierschlüssel für Android sichern
 

@@ -85,7 +85,16 @@ export function TopBar() {
           Datei
         </button>
         {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={effectiveTab === t.id} className={`tab${effectiveTab === t.id && !collapsed ? ' active' : ''}`} onClick={() => select(t.id)} onDoubleClick={toggleCollapse}>
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={effectiveTab === t.id}
+            className={`tab${effectiveTab === t.id && !collapsed ? ' active' : ''}`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => select(t.id)}
+            onDoubleClick={toggleCollapse}
+          >
             {t.label}
           </button>
         ))}

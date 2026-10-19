@@ -39,4 +39,17 @@ export interface Platform {
   closeLoginBrowser?(): Promise<void>;
   /** Android hardware back button. The handler returns true if it handled the event. */
   onBackButton?(handler: () => boolean): void;
+  /** Reads the system clipboard (text and, where supported, an image). */
+  readClipboard(): Promise<ClipboardContent>;
+  writeClipboardText(text: string): Promise<void>;
+  /**
+   * Whether something was copied to the system clipboard after `time` (ms since epoch),
+   * without reading the content. null = unknown on this platform.
+   */
+  clipboardChangedSince?(time: number): Promise<boolean | null>;
+}
+
+export interface ClipboardContent {
+  text: string | null;
+  image: Blob | null;
 }

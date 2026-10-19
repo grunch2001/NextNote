@@ -5,7 +5,10 @@ import { setLastInputKind } from '../../editor/active';
 import { INK_COLORS } from '../../model/colors';
 import type { PageElement } from '../../model/types';
 import { newId, now } from '../../model/util';
-import { measured, pageActions, setElementClipboard, usePage } from '../../state/page';
+import { measured, pageActions, usePage } from '../../state/page';
+import { copyElements } from '../clipboard';
+import { toast } from '../Toasts';
+import { isTouchDevice } from '../../platform';
 import { useUI } from '../../state/ui';
 
 export function duplicateSelection() {
@@ -21,8 +24,11 @@ export function duplicateSelection() {
 
 export function copySelection(cut = false) {
   const { selection, elements } = usePage.getState();
-  setElementClipboard(selection.map((id) => elements[id]).filter(Boolean));
+  const els = selection.map((id) => elements[id]).filter(Boolean);
+  void copyElements(els);
   if (cut) pageActions.remove(selection);
+  const how = isTouchDevice ? 'lange auf eine freie Stelle drücken' : 'Rechtsklick auf eine freie Stelle oder Strg+V';
+  toast(`${cut ? 'Ausgeschnitten' : 'Kopiert'} – zum Einfügen ${how}`);
 }
 
 export function SelectionOverlay() {

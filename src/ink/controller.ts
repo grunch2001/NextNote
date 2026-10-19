@@ -14,6 +14,8 @@ export interface ControllerDeps {
   canvas: HTMLCanvasElement;
   isDark(): boolean;
   createTextAt(x: number, y: number): void;
+  /** Long press with the finger or right click on the page (client coordinates). */
+  onPageMenu(clientX: number, clientY: number): void;
 }
 
 type DrawGesture = {
@@ -52,6 +54,7 @@ interface TouchPt {
 
 const PALM_MS = 700;
 const TAP_SLOP = 9;
+const LONG_PRESS_MS = 520;
 
 const isTextTarget = (t: Element) => !!t.closest('.text-container .ProseMirror, input, textarea, select, [contenteditable="true"]');
 const isOwnPointer = (t: Element) => !!t.closest('[data-own-pointer], button, a[href]');
@@ -70,6 +73,9 @@ export class CanvasController {
   private rejectedUntil = 0;
   private suppressMouseUntil = 0;
   private hover: { x: number; y: number } | null = null;
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private longPressed = false;
+  private lastLongPress = -1e9;
   private ctx: CanvasRenderingContext2D;
 
   constructor(private d: ControllerDeps) {
@@ -99,6 +105,12 @@ export class CanvasController {
     s.removeEventListener('contextmenu', this.onContextMenu);
     cancelAnimationFrame(this.inertiaRaf);
     cancelAnimationFrame(this.renderRaf);
+    this.cancelLongPress();
+  }
+
+  private cancelLongPress() {
+    if (this.longPressTimer) clearTimeout(this.longPressTimer);
+    this.longPressTimer = null;
   }
 
   private get zoom() {
@@ -129,6 +141,7 @@ export class CanvasController {
       this.lastPenTime = performance.now();
       this.penDown = true;
       this.stopInertia();
+      this.cancelLongPress(); // a resting hand is not a long press
     }
     if (isTouch && (this.penDown || performance.now() - this.lastPenTime < PALM_MS)) {
       // palm rejection
@@ -319,6 +332,7 @@ export class CanvasController {
   private onMove = (e: PointerEvent) => {
     if (e.pointerType === 'pen') {
       this.lastPenTime = performance.now();
+      this.cancelLongPress();
       const ui = useUI.getState();
       if (!this.gesture && ui.tool === 'eraser') {
         this.hover = this.toPage(e.clientX, e.clientY);
@@ -545,6 +559,8 @@ export class CanvasController {
     if (e.pointerType === 'pen') this.penDown = false;
     if (this.touches.has(e.pointerId)) {
       this.touches.delete(e.pointerId);
+      this.cancelLongPress();
+      this.longPressed = false;
       if (this.touches.size === 0) this.touchMode = 'idle';
       return;
     }
@@ -576,7 +592,24 @@ export class CanvasController {
       this.touchMode = 'pending';
       this.lastPan = { x: e.clientX, y: e.clientY, t: performance.now() };
       this.velocity = { x: 0, y: 0 };
+      this.longPressed = false;
+      this.cancelLongPress();
+      // long press on the page (not inside text, where Android shows its own menu)
+      if (!isTextTarget(target) && !target.closest('.text-container')) {
+        this.longPressTimer = setTimeout(() => {
+          this.longPressTimer = null;
+          const t = [...this.touches.values()][0];
+          if (this.touchMode !== 'pending' || this.touches.size !== 1 || !t) return;
+          if (Math.hypot(t.x - t.sx, t.y - t.sy) > TAP_SLOP) return;
+          this.longPressed = true;
+          this.touchMode = 'idle';
+          this.lastLongPress = performance.now();
+          navigator.vibrate?.(12);
+          this.d.onPageMenu(t.x, t.y);
+        }, LONG_PRESS_MS);
+      }
     } else if (this.touches.size === 2) {
+      this.cancelLongPress();
       const [a, b] = [...this.touches.values()];
       const mx = (a.x + b.x) / 2;
       const my = (a.y + b.y) / 2;
@@ -599,6 +632,7 @@ export class CanvasController {
         return;
       }
       this.touchMode = 'pan';
+      this.cancelLongPress();
       this.lastPan = { x: t.x, y: t.y, t: performance.now() };
     }
     if (this.touchMode === 'pan') {
@@ -622,6 +656,13 @@ export class CanvasController {
   private touchUp(e: PointerEvent) {
     const t = this.touches.get(e.pointerId)!;
     this.touches.delete(e.pointerId);
+    this.cancelLongPress();
+    if (this.longPressed) {
+      // the menu is open: the lift of the finger is not a tap
+      this.longPressed = false;
+      if (this.touches.size === 0) this.touchMode = 'idle';
+      return;
+    }
     if (this.touchMode === 'pending' && performance.now() - t.t0 < 600) {
       this.touchMode = 'idle';
       this.tap(t, e);
@@ -725,7 +766,13 @@ export class CanvasController {
 
   private onContextMenu = (e: MouseEvent) => {
     const t = e.target as Element;
-    if (!isTextTarget(t)) e.preventDefault();
+    if (isTextTarget(t)) return; // native menu (copy, paste, spelling) inside text
+    e.preventDefault();
+    if (isOwnPointer(t) || t.closest('.text-container')) return;
+    // touch long presses are handled by our own timer, pen buttons erase
+    const pt = (e as PointerEvent).pointerType;
+    if (pt === 'touch' || pt === 'pen' || this.touches.size > 0 || performance.now() - this.lastLongPress < 1000) return;
+    this.d.onPageMenu(e.clientX, e.clientY);
   };
 
   // ------------------------------------------------------------------ live rendering

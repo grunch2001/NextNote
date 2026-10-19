@@ -43,3 +43,13 @@ export function useActiveEditor(): Editor | null {
     () => getActiveEditor(),
   );
 }
+
+/** The editor that toolbar commands act on: the focused one, or the one the toolbar just took focus from. */
+export function targetEditor(): Editor | null {
+  const ed = getActiveEditor();
+  if (!ed || ed.isDestroyed) return null;
+  if (ed.isFocused) return ed;
+  const a = document.activeElement;
+  if (a && a.closest('.ribbon, .tabs, .popover, .dialog')) return ed;
+  return null;
+}

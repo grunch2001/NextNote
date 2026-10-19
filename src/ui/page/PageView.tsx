@@ -5,23 +5,26 @@ import { db } from '../../db/db';
 import { repo } from '../../state/repo';
 import { CanvasController } from '../../ink/controller';
 import { elementBounds, translateElement, unionRect } from '../../ink/geometry';
-import { editorsById, setLastInputKind } from '../../editor/active';
+import { ClipboardPaste, SquareDashedMousePointer, Type } from 'lucide-react';
+import { editorsById, setLastInputKind, targetEditor } from '../../editor/active';
 import { paragraphDoc } from '../../model/text';
-import type { ID, ImageElement, PageMeta, TextElement } from '../../model/types';
+import type { ID, ImageElement, PageElement, PageMeta, TextElement } from '../../model/types';
 import { debounce, newId, now } from '../../model/util';
-import { draftTexts, elementClipboard, measured, pageActions, usePage } from '../../state/page';
+import { draftTexts, elementClipboard, measured, pageActions, setElementClipboard, usePage } from '../../state/page';
 import { useUI } from '../../state/ui';
 import { syncManager } from '../../sync/manager';
+import { platform } from '../../platform';
 import { createImageElement } from '../assets';
 import { isDarkNow } from '../theme';
 import { toast } from '../Toasts';
 import { consumeFocusTitle } from '../actions';
+import { CLIPBOARD_MARKER, noteMarkerCopied, readPasteSource, textMeansElements } from '../clipboard';
+import { openMenu } from '../Dialogs';
 import { ImageView } from './ImageView';
 import { InkLayer } from './InkLayer';
-import { copySelection, duplicateSelection, SelectionOverlay } from './SelectionOverlay';
+import { duplicateSelection, SelectionOverlay } from './SelectionOverlay';
 import { TextContainer } from './TextContainer';
 
-const CLIPBOARD_MARKER = '⁣NextNote-Elemente⁣';
 
 /** Shared with the ribbon: inserts content at a sensible place of the current page. */
 export const pageApi = {
@@ -29,6 +32,8 @@ export const pageApi = {
   createTextAt: (_x: number, _y: number, _doc?: TextElement['doc']): ID | null => null,
   insertImages: async (_files: File[], _at?: { x: number; y: number }) => {},
   insertPdf: async (_file: File) => {},
+  /** Pastes what was copied last; `at` = top-left position on the page (default: visible area). */
+  paste: async (_at?: { x: number; y: number }) => {},
 };
 
 function formatPageDate(ts: number) {
@@ -217,12 +222,88 @@ export function PageView() {
     }
   }, []);
 
+  /** Inserts copies of elements; with `at` their top-left corner lands there, otherwise slightly offset. */
+  const pasteElements = useCallback(async (els: PageElement[], at?: { x: number; y: number }) => {
+    const s = usePage.getState();
+    if (!s.pageId || !s.notebookId || !els.length) return;
+    const bounds = unionRect(els.map((el) => elementBounds(el, measured)));
+    let dx = 24;
+    let dy = 24;
+    if (at && bounds) {
+      dx = at.x - bounds.x;
+      dy = at.y - bounds.y;
+    }
+    const ts = now();
+    const copies: PageElement[] = [];
+    for (let i = 0; i < els.length; i++) {
+      let el = translateElement(structuredClone(els[i]), dx, dy);
+      if (el.type === 'image') {
+        // images belong to a notebook: copy the picture when pasting into another notebook
+        const asset = await repo.getAsset(el.asset);
+        if (asset && asset.notebookId !== s.notebookId) el = { ...el, asset: await repo.addAsset(s.notebookId, asset.data, asset.mime) };
+      }
+      copies.push({ ...el, id: newId(), z: ts + i * 1e-3, updatedAt: ts });
+    }
+    if (usePage.getState().pageId !== s.pageId) return;
+    pageActions.add(copies);
+    pageActions.select(copies.map((c) => c.id));
+    setLastInputKind('page');
+  }, []);
+
+  const paste = useCallback(
+    async (at?: { x: number; y: number }) => {
+      if (!usePage.getState().pageId) return;
+      const editor = at ? null : targetEditor();
+      const src = await readPasteSource();
+      if (!src) {
+        toast('Die Zwischenablage ist leer.');
+        return;
+      }
+      if (src.kind === 'elements') {
+        await pasteElements(src.elements, at ?? viewCenter());
+      } else if (src.kind === 'image') {
+        await insertImages([new File([src.blob], 'zwischenablage.png', { type: src.blob.type || 'image/png' })], at);
+      } else if (editor) {
+        // one line goes in at the cursor, several lines become paragraphs
+        const line = src.text.replace(/\r?\n$/, '');
+        const single = !/\r?\n/.test(line);
+        editor
+          .chain()
+          .focus()
+          .insertContent(single ? { type: 'text', text: line } : (paragraphDoc(src.text).content ?? []))
+          .run();
+      } else {
+        const p = at ?? viewCenter();
+        createTextAt(p.x + 6, p.y + 14, paragraphDoc(src.text));
+      }
+    },
+    [pasteElements, insertImages, createTextAt, viewCenter],
+  );
+
+  /** Long press with the finger / right click on the page. */
+  const showPageMenu = useCallback(
+    (cx: number, cy: number) => {
+      const c = controllerRef.current;
+      if (!c) return;
+      const p = c.toPage(cx, cy);
+      openMenu(cx + 6, cy + 10, [
+        { label: 'Einfügen', icon: <ClipboardPaste size={15} />, run: () => void paste(p) },
+        { label: 'Text hier eingeben', icon: <Type size={15} />, run: () => createTextAt(p.x, p.y) },
+        { label: 'Alles auswählen', icon: <SquareDashedMousePointer size={15} />, run: () => pageActions.select(Object.keys(usePage.getState().elements)) },
+      ]);
+    },
+    [paste, createTextAt],
+  );
+  const showPageMenuRef = useRef(showPageMenu);
+  showPageMenuRef.current = showPageMenu;
+
   useEffect(() => {
     pageApi.createTextAt = createTextAt;
     pageApi.viewCenter = viewCenter;
     pageApi.insertImages = insertImages;
     pageApi.insertPdf = insertPdf;
-  }, [createTextAt, viewCenter, insertImages, insertPdf]);
+    pageApi.paste = paste;
+  }, [createTextAt, viewCenter, insertImages, insertPdf, paste]);
 
   const onPasteFiles = useCallback(
     (files: File[], afterId: ID) => {
@@ -240,7 +321,14 @@ export function PageView() {
     const page = pageRef.current;
     const canvas = canvasRef.current;
     if (!scroller || !page || !canvas) return;
-    const c = new CanvasController({ scroller, page, canvas, isDark: isDarkNow, createTextAt: (x, y) => createTextAt(x, y) });
+    const c = new CanvasController({
+      scroller,
+      page,
+      canvas,
+      isDark: isDarkNow,
+      createTextAt: (x, y) => createTextAt(x, y),
+      onPageMenu: (x, y) => showPageMenuRef.current(x, y),
+    });
     controllerRef.current = c;
     return () => {
       c.destroy();
@@ -291,23 +379,29 @@ export function PageView() {
       }
     };
     const onCopy = (e: ClipboardEvent) => {
-      if (inField(e.target) || !usePage.getState().selection.length) return;
+      const { selection, elements } = usePage.getState();
+      if (inField(e.target) || !selection.length) return;
       e.preventDefault();
-      copySelection(e.type === 'cut');
+      setElementClipboard(selection.map((id) => elements[id]).filter(Boolean));
       e.clipboardData?.setData('text/plain', CLIPBOARD_MARKER);
+      noteMarkerCopied();
+      if (e.type === 'cut') pageActions.remove(selection);
     };
     const onPaste = (e: ClipboardEvent) => {
       if (inField(e.target) || !usePage.getState().pageId || document.querySelector('.dialog-backdrop')) return;
+      if (platform.clipboardChangedSince) {
+        // Android: decide via the clipboard timestamp (no marker in the system clipboard)
+        e.preventDefault();
+        void pageApi.paste();
+        return;
+      }
       const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'));
       const text = e.clipboardData?.getData('text/plain') ?? '';
       e.preventDefault();
       if (files.length) {
         void insertImages(files);
-      } else if (elementClipboard.length && (text === CLIPBOARD_MARKER || !text)) {
-        const ts = now();
-        const copies = elementClipboard.map((el, i) => ({ ...translateElement(structuredClone(el), 24, 24), id: newId(), z: ts + i * 1e-3, updatedAt: ts }));
-        pageActions.add(copies);
-        pageActions.select(copies.map((c) => c.id));
+      } else if (textMeansElements(text)) {
+        void pasteElements(elementClipboard);
       } else if (text.trim()) {
         const c = viewCenter();
         createTextAt(c.x, c.y, paragraphDoc(text));
@@ -350,7 +444,7 @@ export function PageView() {
       scroller?.removeEventListener('dragover', onDragOver);
       scroller?.removeEventListener('drop', onDrop);
     };
-  }, [createTextAt, insertImages, insertPdf, viewCenter, pageId, !!meta]);
+  }, [createTextAt, insertImages, insertPdf, pasteElements, viewCenter, pageId, !!meta]);
 
   // scroll to the top when another page opens
   useEffect(() => {

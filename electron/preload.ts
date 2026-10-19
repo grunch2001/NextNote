@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('nextnoteNative', {
   onFocus: (cb: () => void) => {
     ipcRenderer.on('focus', () => cb());
   },
+  clipboardRead: () => ipcRenderer.invoke('clipboardRead'),
+  clipboardWriteText: (text: string) => ipcRenderer.invoke('clipboardWriteText', text),
   os: process.platform,
   version: '1.0.0',
 });

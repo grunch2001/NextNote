@@ -11,10 +11,11 @@ SDK_WIN='C\:\\Users\\luiss\\AppData\\Local\\Android\\Sdk'
 npm run build
 npx cap sync android
 
-mkdir -p "$WINBUILD/node_modules/@capacitor"
 rsync -a --delete --exclude '/app/build' --exclude '/build' --exclude '/.gradle' --exclude '/capacitor-cordova-android-plugins/build' android/ "$WINBUILD/android/"
-for p in android app browser; do
-  rsync -a --delete --exclude 'build/' "node_modules/@capacitor/$p/" "$WINBUILD/node_modules/@capacitor/$p/"
+# every Gradle module that capacitor.settings.gradle pulls from node_modules (Capacitor itself and all plugins)
+for pkg in $(grep -o "node_modules/[^']*" android/capacitor.settings.gradle | sed -E 's#^node_modules/##; s#/[^/]*$##' | sort -u); do
+  mkdir -p "$WINBUILD/node_modules/$pkg"
+  rsync -a --delete --exclude 'build/' "node_modules/$pkg/" "$WINBUILD/node_modules/$pkg/"
 done
 echo "sdk.dir=$SDK_WIN" > "$WINBUILD/android/local.properties"
 

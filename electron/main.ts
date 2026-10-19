@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeTheme, net, protocol, safeStorage, screen, shell, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeTheme, net, protocol, safeStorage, screen, shell, type MenuItemConstructorOptions } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import tls from 'node:tls';
@@ -130,6 +130,25 @@ ipcMain.handle('http', async (_e, req: HttpReq) => {
   } finally {
     clearTimeout(timer);
   }
+});
+
+ipcMain.handle('clipboardRead', async () => {
+  let text = '';
+  let image: Uint8Array | null = null;
+  try {
+    for (const item of await clipboard.read()) {
+      const imageType = item.types.find((t) => t.startsWith('image/'));
+      if (imageType && !image) image = new Uint8Array(await ((await item.getType(imageType)) as Blob).arrayBuffer());
+      if (item.types.includes('text/plain') && !text) text = await ((await item.getType('text/plain')) as Blob).text();
+    }
+  } catch {
+    text = await clipboard.readText().catch(() => '');
+  }
+  return { text, image };
+});
+
+ipcMain.handle('clipboardWriteText', async (_e, text: string) => {
+  await clipboard.writeText(text);
 });
 
 ipcMain.handle('openExternal', async (_e, url: string) => {

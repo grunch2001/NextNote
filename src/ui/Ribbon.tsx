@@ -13,6 +13,7 @@ import {
   Bold,
   Calendar,
   Camera,
+  ClipboardPaste,
   ChevronDown,
   Circle,
   Clock,
@@ -58,7 +59,7 @@ import {
   Hand,
   PenLine,
 } from 'lucide-react';
-import { editorsById, getActiveEditor, lastInputKind, useActiveEditor } from '../editor/active';
+import { editorsById, getActiveEditor, lastInputKind, targetEditor, useActiveEditor } from '../editor/active';
 import { FONT_SIZES, FONTS, fontStack, formatDate, formatTime } from '../editor/extensions';
 import { TAGS } from '../editor/tags';
 import { HIGHLIGHT_COLORS, HIGHLIGHTER_INK_COLORS, INK_COLORS, PAGE_COLORS, TEXT_COLORS } from '../model/colors';
@@ -127,16 +128,6 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
       <div className="rgroup-label">{label}</div>
     </div>
   );
-}
-
-/** The editor that ribbon commands should act on: the focused one, or the one the ribbon just took focus from. */
-export function targetEditor(): Editor | null {
-  const ed = getActiveEditor();
-  if (!ed || ed.isDestroyed) return null;
-  if (ed.isFocused) return ed;
-  const a = document.activeElement;
-  if (a && a.closest('.ribbon, .popover, .dialog')) return ed;
-  return null;
 }
 
 /** Runs a command on the target editor, or creates a text box first. */
@@ -488,6 +479,15 @@ function InsertTab() {
   const tablePop = usePopover();
   return (
     <>
+      <Group label="Zwischenablage">
+        <RButton
+          big
+          icon={<ClipboardPaste size={20} />}
+          label="Einfügen"
+          title="Einfügen – Lasso-Auswahl, Text oder Bild aus der Zwischenablage (Strg+V)"
+          onClick={() => void pageApi.paste()}
+        />
+      </Group>
       <Group label="Seiten">
         <RButton big icon={<FilePlus size={20} />} label="Neue Seite" title="Neue Seite (Strg+N)" onClick={() => void newPage()} />
         <RButton big icon={<FilePlus2 size={20} />} label="Unterseite" title="Neue Unterseite" onClick={() => void newPage({ subpage: true })} />

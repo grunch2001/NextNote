@@ -35,6 +35,12 @@ await page.getByPlaceholder('https://cloud.example.de').fill(SERVER);
 await page.getByLabel('Benutzername').fill('alice');
 await page.getByLabel('App-Passwort').fill('secret');
 await page.getByRole('button', { name: 'Mit Nextcloud verbinden' }).click();
+// empty server: create the first notebook
+await page.waitForSelector('.page-title, .welcome-card .btn.primary:not(:disabled)', { timeout: 20000 });
+await sleep(800);
+if (await page.getByRole('button', { name: 'Erstes Notizbuch anlegen' }).count()) {
+  await page.getByRole('button', { name: 'Erstes Notizbuch anlegen' }).click();
+}
 await page.waitForSelector('.page-title', { timeout: 20000 });
 await sleep(1500);
 result.notebooks = await page.locator('.notebook-row .nav-label').allTextContents();
@@ -61,6 +67,27 @@ for (const f of files) {
   strokesOnServer += j.elements.filter((e) => e.type === 'ink').length;
 }
 result.strokesOnServer = strokesOnServer;
+// clipboard: copy the stroke with the selection toolbar, paste it with a right click on a free spot
+await page.keyboard.press('Escape');
+await page.getByRole('tab', { name: 'Start' }).click();
+await page.mouse.click(box.x + 100 + 15 * 8, box.y + 260 - 15 * 3);
+await page.waitForSelector('.sel-toolbar', { timeout: 5000 }).catch(() => {});
+await page.locator('.sel-toolbar button[title="Kopieren"]').click();
+await page.keyboard.press('Escape');
+const inkBefore = await page.locator('.ink-layer path').count();
+await page.mouse.click(box.x + 520, box.y + 420, { button: 'right' });
+await page.getByRole('menuitem', { name: 'Einfügen' }).click();
+await sleep(500);
+result.pastedStrokes = (await page.locator('.ink-layer path').count()) - inkBefore;
+// text copied in another Windows program -> ribbon button
+await page.evaluate(() => window.nextnoteNative.clipboardWriteText('Text aus Windows'));
+await page.getByRole('tab', { name: 'Einfügen' }).click();
+await page.getByRole('button', { name: /^Einfügen – Lasso/ }).click();
+await sleep(500);
+result.pastedText = (await page.locator('.text-container').allTextContents()).find((t) => t.includes('Text aus Windows')) ?? null;
+const clip = await page.evaluate(() => window.nextnoteNative.clipboardRead());
+result.clipboardReadWorks = clip.text === 'Text aus Windows';
+
 // PDF printout (checks the pdf.js worker under the app's CSP)
 const pdf = process.argv[5];
 if (pdf) {
