@@ -1,0 +1,11 @@
+node_modules
+dist
+electron-dist
+release
+.tools
+.playwright-mcp
+android/app/build
+android/.gradle
+android/build
+*.keystore
+keystore.properties

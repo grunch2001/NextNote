@@ -1,0 +1,13 @@
+import { contextBridge, ipcRenderer } from 'electron';
+
+contextBridge.exposeInMainWorld('nextnoteNative', {
+  http: (req: unknown) => ipcRenderer.invoke('http', req),
+  openExternal: (url: string) => ipcRenderer.invoke('openExternal', url),
+  secureGet: (key: string) => ipcRenderer.invoke('secureGet', key),
+  secureSet: (key: string, value: string | null) => ipcRenderer.invoke('secureSet', key, value),
+  onFocus: (cb: () => void) => {
+    ipcRenderer.on('focus', () => cb());
+  },
+  os: process.platform,
+  version: '1.0.0',
+});

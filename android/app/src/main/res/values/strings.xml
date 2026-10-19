@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NextNote</string>
+    <string name="title_activity_main">NextNote</string>
+    <string name="package_name">de.luisschuster.nextnote</string>
+    <string name="custom_url_scheme">de.luisschuster.nextnote</string>
+</resources>

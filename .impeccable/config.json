@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles/editor.css"
+        ],
+        "createdAt": "2026-10-19T13:31:59.024Z",
+        "reason": "Claude triage: line 130 is the neutral-gray left rule of the rich-text blockquote ('Zitat' style) inside note content, a standard quotation convention, not a card accent"
+      }
+    ]
+  }
+}
