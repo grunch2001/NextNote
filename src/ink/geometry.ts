@@ -10,6 +10,51 @@ export interface Rect {
 
 export const DEFAULT_TEXT_SIZE = { w: 160, h: 28 };
 
+const isAxes = (shape: InkElement['shape']) => shape === 'axes1' || shape === 'axes2' || shape === 'axes4';
+
+/**
+ * Lines (flat x,y pairs) of a coordinate system spanning the dragged rectangle:
+ * x axis, its arrow head, y axis, its arrow head.
+ */
+export function axesPolylines(el: InkElement): number[][] {
+  const [x1, y1, , x2 = x1, y2 = y1] = el.pts;
+  const l = Math.min(x1, x2);
+  const r = Math.max(x1, x2);
+  const t = Math.min(y1, y2);
+  const b = Math.max(y1, y2);
+  // origin: bottom left (axes1), middle left (axes2) or center (axes4)
+  const ox = el.shape === 'axes4' ? (l + r) / 2 : l;
+  const oy = el.shape === 'axes1' ? b : (t + b) / 2;
+  const head = Math.max(8, el.size * 3);
+  const hx = Math.min(head, (r - l) / 3);
+  const hy = Math.min(head, (b - t) / 3);
+  const c = Math.cos(0.45);
+  const s = Math.sin(0.45);
+  return [
+    [l, oy, r, oy],
+    [r - hx * c, oy - hx * s, r, oy, r - hx * c, oy + hx * s],
+    [ox, b, ox, t],
+    [ox - hy * s, t + hy * c, ox, t, ox + hy * s, t + hy * c],
+  ];
+}
+
+function pushSegment(out: number[], ax: number, ay: number, bx: number, by: number) {
+  const n = Math.max(2, Math.ceil(Math.hypot(bx - ax, by - ay) / 4));
+  for (let i = 0; i <= n; i++) out.push(ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n);
+}
+
+/** Points along the visible geometry of a stroke as flat x,y pairs, one list per connected piece. */
+export function strokeRuns(el: InkElement): number[][] {
+  if (isAxes(el.shape)) {
+    return axesPolylines(el).map((line) => {
+      const out: number[] = [];
+      for (let i = 0; i + 3 < line.length; i += 2) pushSegment(out, line[i], line[i + 1], line[i + 2], line[i + 3]);
+      return out;
+    });
+  }
+  return [strokeSamples(el)];
+}
+
 /** Points along the visible geometry of a stroke as flat x,y pairs. */
 export function strokeSamples(el: InkElement): number[] {
   if (!el.shape || el.shape === 'poly') {
@@ -17,12 +62,10 @@ export function strokeSamples(el: InkElement): number[] {
     for (let i = 0; i < el.pts.length; i += 3) out.push(el.pts[i], el.pts[i + 1]);
     return out;
   }
+  if (isAxes(el.shape)) return strokeRuns(el).flat();
   const [x1, y1, , x2 = x1, y2 = y1] = el.pts;
   const out: number[] = [];
-  const seg = (ax: number, ay: number, bx: number, by: number) => {
-    const n = Math.max(2, Math.ceil(Math.hypot(bx - ax, by - ay) / 4));
-    for (let i = 0; i <= n; i++) out.push(ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n);
-  };
+  const seg = (ax: number, ay: number, bx: number, by: number) => pushSegment(out, ax, ay, bx, by);
   switch (el.shape) {
     case 'line':
     case 'arrow':
@@ -108,12 +151,13 @@ function distToSegmentSq(px: number, py: number, ax: number, ay: number, bx: num
 export function strokeHit(el: InkElement, x: number, y: number, r: number): boolean {
   const b = strokeBounds(el);
   if (x < b.x - r || x > b.x + b.w + r || y < b.y - r || y > b.y + b.h + r) return false;
-  const s = strokeSamples(el);
   const rr = r + el.size / 2;
   const rr2 = rr * rr;
-  if (s.length === 2) return (s[0] - x) ** 2 + (s[1] - y) ** 2 <= rr2;
-  for (let i = 0; i + 3 < s.length; i += 2) {
-    if (distToSegmentSq(x, y, s[i], s[i + 1], s[i + 2], s[i + 3]) <= rr2) return true;
+  for (const s of strokeRuns(el)) {
+    if (s.length === 2 && (s[0] - x) ** 2 + (s[1] - y) ** 2 <= rr2) return true;
+    for (let i = 0; i + 3 < s.length; i += 2) {
+      if (distToSegmentSq(x, y, s[i], s[i + 1], s[i + 2], s[i + 3]) <= rr2) return true;
+    }
   }
   return false;
 }
@@ -125,29 +169,33 @@ export function strokeHit(el: InkElement, x: number, y: number, r: number): bool
 export function eraseFromStroke(el: InkElement, x: number, y: number, r: number): InkElement[] | null {
   if (!strokeHit(el, x, y, r)) return null;
   // convert shapes to polylines first
-  let pts = el.pts;
+  let runs = [el.pts];
   let shape = el.shape;
   if (el.shape && el.shape !== 'poly') {
-    const s = strokeSamples(el);
-    pts = [];
-    for (let i = 0; i < s.length; i += 2) pts.push(s[i], s[i + 1], 0.5);
+    runs = strokeRuns(el).map((s) => {
+      const pts: number[] = [];
+      for (let i = 0; i < s.length; i += 2) pts.push(s[i], s[i + 1], 0.5);
+      return pts;
+    });
     shape = 'poly';
   }
   const rr = r + el.size / 2;
   const rr2 = rr * rr;
   const pieces: number[][] = [];
-  let cur: number[] = [];
-  for (let i = 0; i < pts.length; i += 3) {
-    const inside = (pts[i] - x) ** 2 + (pts[i + 1] - y) ** 2 <= rr2;
-    if (inside) {
-      if (cur.length >= 6) pieces.push(cur);
-      cur = [];
-    } else {
-      cur.push(pts[i], pts[i + 1], pts[i + 2]);
+  for (const pts of runs) {
+    let cur: number[] = [];
+    for (let i = 0; i < pts.length; i += 3) {
+      const inside = (pts[i] - x) ** 2 + (pts[i + 1] - y) ** 2 <= rr2;
+      if (inside) {
+        if (cur.length >= 6) pieces.push(cur);
+        cur = [];
+      } else {
+        cur.push(pts[i], pts[i + 1], pts[i + 2]);
+      }
     }
+    if (cur.length >= 6) pieces.push(cur);
   }
-  if (cur.length >= 6) pieces.push(cur);
-  if (pieces.length === 1 && pieces[0].length === pts.length && shape === el.shape) return null;
+  if (pieces.length === 1 && pieces[0].length === el.pts.length && shape === el.shape) return null;
   const ts = now();
   return pieces.map((p, i) => ({ ...el, id: newId(), pts: p, shape, z: el.z + i * 1e-6, updatedAt: ts }));
 }

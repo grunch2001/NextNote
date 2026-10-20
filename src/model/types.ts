@@ -92,7 +92,8 @@ export interface TextElement extends ElementBase {
   conflictOf?: ID;
 }
 
-export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse' | 'poly';
+/** axes1: first quadrant, axes2: positive x with positive and negative y, axes4: all four quadrants. */
+export type ShapeKind = 'line' | 'arrow' | 'rect' | 'ellipse' | 'axes1' | 'axes2' | 'axes4' | 'poly';
 
 export interface InkElement extends ElementBase {
   type: 'ink';

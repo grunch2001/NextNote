@@ -643,6 +643,21 @@ function PenButton({ preset, active, kind, onSelect, onChange }: { preset: PenPr
   );
 }
 
+const AXES_ICON_PATHS = {
+  axes1: 'M5 19H21M18 16l3 3-3 3M5 19V3M2 6l3-3 3 3',
+  axes2: 'M5 12H21M18 9l3 3-3 3M5 21V3M2 6l3-3 3 3',
+  axes4: 'M3 12H21M18 9l3 3-3 3M12 21V3M9 6l3-3 3 3',
+};
+
+/** Coordinate system icon in the style of the lucide icons. */
+function AxesIcon({ kind }: { kind: keyof typeof AXES_ICON_PATHS }) {
+  return (
+    <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={AXES_ICON_PATHS[kind]} />
+    </svg>
+  );
+}
+
 function DrawTab() {
   const ui = useUI();
   const fingerDraws = useSettings((s) => s.drawWithFinger);
@@ -706,27 +721,20 @@ function DrawTab() {
         </div>
       </Group>
       <Group label="Formen">
-        <div className="rstack">
-          <div className="rrow">
-            {(
-              [
-                ['line', <Slash key="l" size={17} />, 'Linie'],
-                ['arrow', <MoveRight key="a" size={17} />, 'Pfeil'],
-              ] as const
-            ).map(([shape, icon, label]) => (
-              <RButton key={shape} icon={icon} title={label} active={tool === 'shape' && ui.shape === shape} onClick={() => useUI.setState({ tool: 'shape', shape })} />
-            ))}
-          </div>
-          <div className="rrow">
-            {(
-              [
-                ['rect', <Square key="r" size={17} />, 'Rechteck'],
-                ['ellipse', <Circle key="e" size={17} />, 'Ellipse'],
-              ] as const
-            ).map(([shape, icon, label]) => (
-              <RButton key={shape} icon={icon} title={label} active={tool === 'shape' && ui.shape === shape} onClick={() => useUI.setState({ tool: 'shape', shape })} />
-            ))}
-          </div>
+        <div className="rrow">
+          {(
+            [
+              ['line', <Slash key="l" size={17} />, 'Linie'],
+              ['arrow', <MoveRight key="a" size={17} />, 'Pfeil'],
+              ['rect', <Square key="r" size={17} />, 'Rechteck'],
+              ['ellipse', <Circle key="e" size={17} />, 'Ellipse'],
+              ['axes1', <AxesIcon key="k1" kind="axes1" />, 'Koordinatensystem (1. Quadrant)'],
+              ['axes2', <AxesIcon key="k2" kind="axes2" />, 'Koordinatensystem (1. und 4. Quadrant)'],
+              ['axes4', <AxesIcon key="k4" kind="axes4" />, 'Koordinatensystem (alle Quadranten)'],
+            ] as const
+          ).map(([shape, icon, label]) => (
+            <RButton key={shape} icon={icon} title={label} active={tool === 'shape' && ui.shape === shape} onClick={() => useUI.setState({ tool: 'shape', shape })} />
+          ))}
         </div>
       </Group>
       <Group label="Eingabe">

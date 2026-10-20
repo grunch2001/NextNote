@@ -1,5 +1,6 @@
 import { getStroke } from 'perfect-freehand';
 import type { InkElement } from '../model/types';
+import { axesPolylines } from './geometry';
 
 /** Fill outline of a freehand pen stroke (pressure sensitive). */
 export function freehandOutline(pts: number[], size: number, opts: { uniform: boolean; last: boolean }): number[][] {
@@ -85,6 +86,12 @@ function shapePath(el: InkElement): string {
       const ry = Math.abs(y2 - y1) / 2;
       return `M${r2(cx - rx)},${r2(cy)}a${r2(rx)},${r2(ry)} 0 1,0 ${r2(rx * 2)},0a${r2(rx)},${r2(ry)} 0 1,0 ${r2(-rx * 2)},0`;
     }
+    case 'axes1':
+    case 'axes2':
+    case 'axes4':
+      return axesPolylines(el)
+        .map((line) => polylinePath(line, 2))
+        .join('');
     default:
       return polylinePath(el.pts);
   }
