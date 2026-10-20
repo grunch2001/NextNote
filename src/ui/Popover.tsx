@@ -7,14 +7,25 @@ export function Popover({ anchor, onClose, children, className }: { anchor: HTML
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
   useLayoutEffect(() => {
-    if (!anchor || !ref.current) return;
-    const a = anchor.getBoundingClientRect();
-    const r = ref.current.getBoundingClientRect();
-    let left = a.left;
-    if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - r.width - 8);
-    let top = a.bottom + 4;
-    if (top + r.height > window.innerHeight - 8) top = Math.max(8, a.top - r.height - 4);
-    setPos({ left, top });
+    const el = ref.current;
+    if (!anchor || !el) return;
+    const place = () => {
+      const a = anchor.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      let left = a.left;
+      if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - r.width - 8);
+      let top = a.bottom + 4;
+      if (top + r.height > window.innerHeight - 8) {
+        const above = a.top - r.height - 4;
+        top = above >= 8 ? above : Math.max(8, window.innerHeight - r.height - 8);
+      }
+      setPos({ left, top });
+    };
+    place();
+    // content can grow while open (e.g. the colour picker unfolds)
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [anchor]);
 
   useEffect(() => {
@@ -26,13 +37,17 @@ export function Popover({ anchor, onClose, children, className }: { anchor: HTML
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
+    const onResize = () => {
+      // the on-screen keyboard resizes the window when a field inside the popover is focused
+      if (!ref.current?.contains(document.activeElement)) onClose();
+    };
     window.addEventListener('pointerdown', onDown, true);
     window.addEventListener('keydown', onKey);
-    window.addEventListener('resize', onClose);
+    window.addEventListener('resize', onResize);
     return () => {
       window.removeEventListener('pointerdown', onDown, true);
       window.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', onClose);
+      window.removeEventListener('resize', onResize);
     };
   }, [anchor, onClose]);
 

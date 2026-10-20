@@ -75,6 +75,7 @@ import { pickFiles } from './assets';
 import { promptDialog } from './Dialogs';
 import { newPage } from './actions';
 import { pageApi } from './page/PageView';
+import { SpectrumPicker } from './ColorPicker';
 import { Popover, usePopover } from './Popover';
 import { useIsDark } from './theme';
 
@@ -560,21 +561,39 @@ function InsertTab() {
 // ------------------------------------------------------------------ Zeichnen
 
 function PenEditor({ preset, colors, sizes, onChange }: { preset: PenPreset; colors: string[]; sizes: number[]; onChange(p: Partial<PenPreset>): void }) {
+  const [spectrumOpen, setSpectrumOpen] = useState(false);
+  const custom = !colors.some((c) => c.toLowerCase() === preset.color.toLowerCase());
+  // shrink the preview dots proportionally so the thickest one still fits its button
+  const dotScale = Math.min(1, 26 / (Math.max(...sizes) + 2));
   return (
     <div className="pen-editor">
       <div className="pen-sizes">
-        {sizes.map((s) => (
-          <button key={s} type="button" className={`pen-size${Math.abs(preset.size - s) < 0.01 ? ' active' : ''}`} onClick={() => onChange({ size: s })} aria-label={`Stärke ${s}`}>
-            <span style={{ width: Math.min(28, s + 2), height: Math.min(28, s + 2), background: preset.color }} />
-          </button>
-        ))}
+        {sizes.map((s) => {
+          const active = Math.abs(preset.size - s) < 0.01;
+          const dot = (s + 2) * dotScale;
+          return (
+            <button key={s} type="button" className={`pen-size${active ? ' active' : ''}`} onClick={() => onChange({ size: s })} aria-label={`Stärke ${s}`} aria-pressed={active}>
+              <span style={{ width: dot, height: dot, background: preset.color }} />
+            </button>
+          );
+        })}
       </div>
-      <input type="range" min={sizes[0]} max={sizes[sizes.length - 1]} step={0.5} value={preset.size} onChange={(e) => onChange({ size: Number(e.target.value) })} aria-label="Strichstärke" />
       <div className="swatch-grid">
         {colors.map((c) => (
           <button key={c} type="button" className={`swatch${preset.color.toLowerCase() === c.toLowerCase() ? ' current' : ''}`} style={{ background: c }} onClick={() => onChange({ color: c })} aria-label={c} />
         ))}
+        <button
+          type="button"
+          className={`swatch swatch-spectrum${custom ? ' current' : ''}`}
+          onClick={() => setSpectrumOpen((o) => !o)}
+          aria-label="Eigene Farbe"
+          aria-expanded={spectrumOpen}
+          title="Eigene Farbe aus dem ganzen Farbspektrum"
+        >
+          {custom && <span style={{ background: preset.color }} />}
+        </button>
       </div>
+      {spectrumOpen && <SpectrumPicker color={preset.color} onChange={(color) => onChange({ color })} />}
     </div>
   );
 }
