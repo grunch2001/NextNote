@@ -56,6 +56,11 @@
 
 .page-sizer {
   position: relative;
+  /* at least the visible area (without scrollbars), the rest of the page is clipped;
+     clip instead of hidden: no scroll container that scrollIntoView could shift */
+  min-width: 100%;
+  min-height: 100%;
+  overflow: clip;
 }
 
 .page {

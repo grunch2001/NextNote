@@ -134,9 +134,10 @@ export function PageView() {
   useEffect(() => {
     const s = scrollerRef.current;
     if (!s) return;
-    const ro = new ResizeObserver(() => setView({ w: s.clientWidth, h: s.clientHeight }));
+    // outer size incl. scrollbars, so the value does not change when they appear
+    const ro = new ResizeObserver(() => setView({ w: s.offsetWidth, h: s.offsetHeight }));
     ro.observe(s);
-    setView({ w: s.clientWidth, h: s.clientHeight });
+    setView({ w: s.offsetWidth, h: s.offsetHeight });
     return () => ro.disconnect();
   }, [pageId, !!meta]);
 
@@ -457,8 +458,14 @@ export function PageView() {
     return unionRect(list.map((el) => elementBounds(el, measured)));
   }, [list, measureVersion]);
 
-  const width = Math.max(view.w / zoom, (bounds ? bounds.x + bounds.w : 0) + 320, 860);
-  const height = Math.max(view.h / zoom, (bounds ? bounds.y + bounds.h : 0) + 480);
+  // The scroll area depends on the content only; CSS stretches it to the visible area.
+  // Sizing it from the visible area made the scrollbars flicker at zoom levels other than
+  // 100 %: a fraction of a pixel too much showed them, which shrank the area, which hid them …
+  const contentW = Math.max((bounds ? bounds.x + bounds.w : 0) + 320, 860);
+  const contentH = (bounds ? bounds.y + bounds.h : 0) + 480;
+  // the page itself covers the visible area (the sizer clips what is beyond)
+  const width = Math.max(view.w / zoom, contentW);
+  const height = Math.max(view.h / zoom, contentH);
   const sel = useMemo(() => new Set(selection), [selection]);
 
   if (!pageId) {
@@ -484,7 +491,7 @@ export function PageView() {
   return (
     <div className="page-view">
       <div className="page-scroller" ref={scrollerRef}>
-        <div className="page-sizer" style={{ width: width * zoom, height: height * zoom }}>
+        <div className="page-sizer" style={{ width: contentW * zoom, height: contentH * zoom }}>
           <div
             ref={pageRef}
             className={`page rule-${meta.rule}${meta.bgColor ? ' has-color' : ''}`}

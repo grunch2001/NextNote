@@ -9,3 +9,4 @@ android/.gradle
 android/build
 *.keystore
 keystore.properties
+ClaudeCodeInput
