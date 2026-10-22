@@ -11,6 +11,7 @@ import { openMenu, openMenuAt, type MenuItem } from './Dialogs';
 import { deleteNotebook, deleteSection, moveNotebookBefore, movePagesTo, moveSectionTo, newNotebook, newSection, renameNotebook, renameSection } from './actions';
 import { beginDrag, dropClass, useDnd, type DragPayload, type DropTarget } from './dnd';
 import { openMoveDialog } from './MoveDialog';
+import { PaneFoot } from './PaneToggles';
 
 async function handleDrop(payload: DragPayload, target: DropTarget) {
   if (payload.kind === 'notebook' && target.kind === 'notebook') {
@@ -188,6 +189,7 @@ export function NavPane() {
           </button>
         )}
       </div>
+      <PaneFoot pane="nav" />
     </nav>
   );
 }

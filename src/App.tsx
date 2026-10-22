@@ -13,6 +13,7 @@ import { TopBar } from './ui/TopBar';
 import { Ribbon, insertLink } from './ui/Ribbon';
 import { NavPane } from './ui/NavPane';
 import { PageList } from './ui/PageList';
+import { PaneRail } from './ui/PaneToggles';
 import { PageView } from './ui/page/PageView';
 import { SearchPanel } from './ui/SearchPanel';
 import { SettingsDialog } from './ui/SettingsDialog';
@@ -185,8 +186,10 @@ export function App() {
           <>
             {narrow && navOpen && <div className="drawer-backdrop" onClick={() => useUI.setState({ navOpen: false })} />}
             <div className={`panes${navOpen ? ' open' : ''}${narrow ? ' drawer' : ''}`}>
+              {!narrow && !navOpen && <PaneRail nav pages={!pagesOpen} />}
               {(navOpen || narrow) && <NavPane />}
               {(pagesOpen || narrow) && (navOpen || !narrow) && <PageList />}
+              {!narrow && navOpen && !pagesOpen && <PaneRail pages />}
             </div>
             <PageView />
             {searchOpen && <SearchPanel />}

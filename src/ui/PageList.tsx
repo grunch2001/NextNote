@@ -9,6 +9,7 @@ import { openMenu, openMenuAt, type MenuItem } from './Dialogs';
 import { changeLevel, deletePages, movePagesTo, newPage } from './actions';
 import { beginDrag, dropClass, useDnd, type DragPayload, type DropTarget } from './dnd';
 import { openMoveDialog } from './MoveDialog';
+import { PaneFoot } from './PaneToggles';
 
 function shortDate(ts: number) {
   const d = new Date(ts);
@@ -131,6 +132,7 @@ export function PageList() {
           </button>
         )}
       </div>
+      <PaneFoot pane="pages" />
     </aside>
   );
 }

@@ -809,6 +809,38 @@ button:disabled {
   overscroll-behavior: contain;
 }
 
+.pane-foot {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* collapsed panes: the expand buttons sit where the collapse button was */
+.pane-rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  width: 36px;
+  padding: 4px 0;
+  background: var(--pages-bg);
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+
+.pane-rail.nav {
+  background: var(--nav-bg);
+}
+
+@media (pointer: coarse) {
+  .pane-rail {
+    width: 42px;
+  }
+}
+
 .nav-row,
 .page-row {
   position: relative;
@@ -1864,6 +1896,11 @@ button:disabled {
 
 .app.narrow .page-list {
   width: min(250px, 48vw);
+}
+
+/* the drawer closes via backdrop and menu button */
+.app.narrow .pane-foot {
+  display: none;
 }
 
 @media (max-width: 560px) {
