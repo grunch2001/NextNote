@@ -3,10 +3,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION=$(node -p "require('./package.json').version")
-WINBUILD=/mnt/c/Users/luiss/AppData/Local/NextNoteBuild
-WINBUILD_WIN='C:\Users\luiss\AppData\Local\NextNoteBuild'
+# Windows user with Android Studio (SDK in the default location); override with WIN_USER=...
+WIN_USER=${WIN_USER:-$(cmd.exe /c 'echo %USERNAME%' 2>/dev/null | tr -d '\r')}
+WINBUILD=/mnt/c/Users/$WIN_USER/AppData/Local/NextNoteBuild
 JAVA_HOME_WIN='C:\Program Files\Android\Android Studio\jbr'
-SDK_WIN='C\:\\Users\\luiss\\AppData\\Local\\Android\\Sdk'
+SDK_WIN='C\:\\Users\\'"$WIN_USER"'\\AppData\\Local\\Android\\Sdk'
 
 npm run build
 npx cap sync android
