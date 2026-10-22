@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeHttpPlugin.class);
         registerPlugin(NativeClipboardPlugin.class);
+        registerPlugin(NativeSecureStoragePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -31,6 +31,12 @@ interface NativeClipboardPlugin {
   writeText(opts: { text: string }): Promise<void>;
 }
 
+interface NativeSecureStoragePlugin {
+  get(opts: { key: string }): Promise<{ value?: string }>;
+  set(opts: { key: string; value: string }): Promise<void>;
+  remove(opts: { key: string }): Promise<void>;
+}
+
 interface NativeHttpPlugin {
   request(opts: {
     method: string;
@@ -73,6 +79,7 @@ function electronPlatform(bridge: ElectronBridge): Platform {
 function androidPlatform(): Platform {
   const NativeHttp = registerPlugin<NativeHttpPlugin>('NativeHttp');
   const NativeClipboard = registerPlugin<NativeClipboardPlugin>('NativeClipboard');
+  const NativeSecureStorage = registerPlugin<NativeSecureStoragePlugin>('NativeSecureStorage');
   return {
     kind: 'android',
     deviceName: 'NextNote (Android)',
@@ -103,17 +110,36 @@ function androidPlatform(): Platform {
     },
     async secureGet(k) {
       try {
-        return localStorage.getItem(`secure.${k}`);
+        const { value } = await NativeSecureStorage.get({ key: k });
+        if (value != null) return value;
+        // version 1.0.0 kept the value unencrypted in localStorage: move it into the Keystore
+        const legacy = localStorage.getItem(`secure.${k}`);
+        if (legacy !== null) {
+          await NativeSecureStorage.set({ key: k, value: legacy });
+          localStorage.removeItem(`secure.${k}`);
+        }
+        return legacy;
       } catch {
-        return null;
+        try {
+          return localStorage.getItem(`secure.${k}`);
+        } catch {
+          return null;
+        }
       }
     },
     async secureSet(k, v) {
       try {
-        if (v === null) localStorage.removeItem(`secure.${k}`);
-        else localStorage.setItem(`secure.${k}`, v);
+        if (v === null) await NativeSecureStorage.remove({ key: k });
+        else await NativeSecureStorage.set({ key: k, value: v });
+        localStorage.removeItem(`secure.${k}`);
       } catch {
-        // storage unavailable
+        // Keystore unusable on this device: fall back to the app's private storage
+        try {
+          if (v === null) localStorage.removeItem(`secure.${k}`);
+          else localStorage.setItem(`secure.${k}`, v);
+        } catch {
+          // storage unavailable
+        }
       }
     },
     onResume(cb) {

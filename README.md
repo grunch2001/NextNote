@@ -141,7 +141,8 @@ NextNote/
 
 - NextNote verbindet sich ausschließlich mit der Nextcloud, die du einträgst. Es gibt keine Telemetrie, keine Werbung und keine Drittanbieter-Dienste.
 - Statt deines Nextcloud-Passworts speichert NextNote ein eigenes App-Passwort. Du siehst es in Nextcloud unter *Einstellungen → Sicherheit* und kannst es dort widerrufen. Beim Abmelden in NextNote wird es automatisch widerrufen.
-- Unter **Windows** ist das App-Passwort mit der Windows-Datenschutz-API (DPAPI) verschlüsselt. Unter **Android** liegt es im privaten Speicher der App.
+- Unter **Windows** ist das App-Passwort mit der Windows-Datenschutz-API (DPAPI) verschlüsselt, unter **Android** mit einem Schlüssel aus dem Android-Keystore, der das Gerät nicht verlassen kann.
+- Unter Android schließt NextNote seine Daten von Android-Backups und von der Übertragung auf ein neues Gerät aus. Auf einem neuen Gerät meldest du dich einfach neu an, und deine Notizbücher kommen aus der Nextcloud. Synchronisiere vor einem Gerätewechsel, damit keine Änderung verloren geht.
 - Verwende eine Nextcloud mit `https://`. Bei `http://` warnt NextNote, weil Passwort und Notizen dann unverschlüsselt übertragen würden.
 
 ## Entwicklung
@@ -169,7 +170,7 @@ npm run icons             # App-Icons aus build-resources/icon.svg erzeugen
 | `src/ink` | Stifteingabe, Gesten (Stift/Finger/Maus, Handballenerkennung, Zoom), Radierer, Lasso |
 | `src/ui`, `src/editor` | Oberfläche (React) und Rich-Text-Editor (TipTap) |
 | `electron/` | Windows-Hülle: HTTP über den Hauptprozess, App-Passwort per DPAPI verschlüsselt |
-| `android/` | Capacitor-Projekt mit zwei eigenen Plugins: `NativeHttpPlugin` (OkHttp, weil WebDAV-Methoden wie PROPFIND und MKCOL mit dem Standard-HTTP von Capacitor nicht gehen) und `NativeClipboardPlugin` (Zwischenablage inkl. Bildern) |
+| `android/` | Capacitor-Projekt mit drei eigenen Plugins: `NativeHttpPlugin` (OkHttp, weil WebDAV-Methoden wie PROPFIND und MKCOL mit dem Standard-HTTP von Capacitor nicht gehen), `NativeClipboardPlugin` (Zwischenablage inkl. Bildern) und `NativeSecureStoragePlugin` (App-Passwort, mit dem Android-Keystore verschlüsselt) |
 | `tools/` | Build-Skripte, Mock-Nextcloud, Icon-Erzeugung, End-to-End-Test der Windows-App |
 
 ### Windows-Version bauen
