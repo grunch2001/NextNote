@@ -1,7 +1,7 @@
 {
   "name": "nextnote",
   "productName": "NextNote",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "OneNote-artige Notiz-App mit Nextcloud-Synchronisierung",
   "private": true,
   "type": "module",

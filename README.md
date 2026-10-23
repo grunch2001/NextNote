@@ -222,7 +222,7 @@ keyPassword=…
 
 Beide Dateien sind per `.gitignore` vom Repository ausgeschlossen. Bewahre sie sicher auf: Ohne denselben Schlüssel lassen sich spätere Versionen nicht als Update über eine installierte App installieren.
 
-## Grenzen der Version 1.0
+## Grenzen der Version 1.1
 
 - Keine Handschrifterkennung (Umwandlung in Text)
 - OneNote-Import nur unter Windows und nur für Notizbücher in OneDrive; `.one`-Dateien lassen sich nicht direkt öffnen
