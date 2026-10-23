@@ -11,6 +11,15 @@
         ],
         "createdAt": "2026-10-19T13:31:59.024Z",
         "reason": "Claude triage: line 130 is the neutral-gray left rule of the rich-text blockquote ('Zitat' style) inside note content, a standard quotation convention, not a card accent"
+      },
+      {
+        "rule": "overused-font",
+        "value": "arial",
+        "files": [
+          "tests/onenote.test.ts"
+        ],
+        "createdAt": "2026-10-22T08:19:13.323Z",
+        "reason": "Claude: test fixture reproducing OneNote's output HTML (font-family:Arial), not UI styling"
       }
     ]
   }

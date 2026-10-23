@@ -182,8 +182,9 @@
   background-color: #ffff00;
 }
 
+/* the highlight mark carries an inline "color: inherit", which would keep light text on the bright background */
 [data-theme='dark'] .nn-editor mark {
-  color: #111;
+  color: #111 !important;
 }
 
 /* tables */

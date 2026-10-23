@@ -34,6 +34,7 @@ interface UIState {
   zoom: number;
   searchOpen: boolean;
   settingsOpen: boolean;
+  importOpen: boolean;
   recycleBinFor: ID | null;
 
   openPage(pageId: ID | null, sectionId?: ID | null, notebookId?: ID | null): void;
@@ -80,6 +81,7 @@ export const useUI = create<UIState>()(
       zoom: 1,
       searchOpen: false,
       settingsOpen: false,
+      importOpen: false,
       recycleBinFor: null,
 
       openPage(pageId, sectionId, notebookId) {

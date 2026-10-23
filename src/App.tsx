@@ -17,6 +17,7 @@ import { PaneRail } from './ui/PaneToggles';
 import { PageView } from './ui/page/PageView';
 import { SearchPanel } from './ui/SearchPanel';
 import { SettingsDialog } from './ui/SettingsDialog';
+import { OneNoteImport } from './ui/OneNoteImport';
 import { RecycleBin } from './ui/RecycleBin';
 import { MoveDialog } from './ui/MoveDialog';
 import { DialogHost, MenuHost } from './ui/Dialogs';
@@ -197,6 +198,7 @@ export function App() {
         )}
       </div>
       <SettingsDialog />
+      <OneNoteImport />
       <RecycleBin />
       <MoveDialog />
       <DialogHost />

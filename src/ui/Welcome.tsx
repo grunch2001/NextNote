@@ -1,8 +1,18 @@
-import { BookPlus, RefreshCw } from 'lucide-react';
+import { BookPlus, FileInput, RefreshCw } from 'lucide-react';
 import { repo } from '../state/repo';
 import { useUI } from '../state/ui';
 import { useSync } from '../sync/manager';
+import { oneNoteImportAvailable } from './OneNoteImport';
 import { ConnectForm } from './SettingsDialog';
+
+function ImportButton() {
+  if (!oneNoteImportAvailable()) return null;
+  return (
+    <button type="button" className="btn wide welcome-import" onClick={() => useUI.setState({ importOpen: true })}>
+      <FileInput size={16} /> Notizbücher aus OneNote importieren
+    </button>
+  );
+}
 
 async function startLocal() {
   const { notebook, section, page } = await repo.createNotebook('Mein Notizbuch');
@@ -29,9 +39,12 @@ export function Welcome() {
             {status === 'syncing' ? (
               <RefreshCw className="spin" size={28} />
             ) : (
-              <button type="button" className="btn primary wide" onClick={() => void startLocal()}>
-                <BookPlus size={16} /> Erstes Notizbuch anlegen
-              </button>
+              <>
+                <button type="button" className="btn primary wide" onClick={() => void startLocal()}>
+                  <BookPlus size={16} /> Erstes Notizbuch anlegen
+                </button>
+                <ImportButton />
+              </>
             )}
           </>
         ) : (
@@ -42,6 +55,7 @@ export function Welcome() {
             <button type="button" className="btn wide" onClick={() => void startLocal()}>
               <BookPlus size={16} /> Erst einmal ohne Nextcloud starten
             </button>
+            <ImportButton />
           </>
         )}
       </div>

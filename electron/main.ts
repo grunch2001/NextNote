@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import tls from 'node:tls';
 import { pathToFileURL } from 'node:url';
+import { authorizeViaLoopback } from './oauth';
 
 const DEV_URL = process.env.NEXTNOTE_DEV_URL;
 const DIST = path.join(__dirname, '..', 'dist');
@@ -153,6 +154,32 @@ ipcMain.handle('clipboardWriteText', async (_e, text: string) => {
 
 ipcMain.handle('openExternal', async (_e, url: string) => {
   if (/^(https?|mailto):/i.test(url)) await shell.openExternal(url);
+});
+
+// ------------------------------------------------------------------ OAuth sign-in in the system browser (e.g. Microsoft for the OneNote import)
+
+let cancelOAuth: (() => void) | null = null;
+
+ipcMain.handle('oauthAuthorize', async (_e, authorizeUrl: string) => {
+  cancelOAuth?.();
+  const flow = authorizeViaLoopback(authorizeUrl, {
+    open: (url) => shell.openExternal(url),
+    onRedirect: () => {
+      if (!win) return;
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    },
+  });
+  cancelOAuth = flow.cancel;
+  try {
+    return await flow.result;
+  } finally {
+    if (cancelOAuth === flow.cancel) cancelOAuth = null;
+  }
+});
+
+ipcMain.handle('oauthCancel', () => {
+  cancelOAuth?.();
 });
 
 // ------------------------------------------------------------------ window

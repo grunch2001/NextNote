@@ -37,6 +37,7 @@
 - Übersicht aller Tags und offenen Aufgaben über alle Notizbücher hinweg
 - Papierkorb (60 Tage), Rückgängig/Wiederholen
 - Seitenleisten lassen sich einklappen, damit die Seite den ganzen Bildschirm bekommt
+- **Import aus OneNote** (Windows): ganze Notizbücher mit Text, Tabellen, Tags, Bildern und Handschrift übernehmen
 
 **Seiten und Text**
 - Textcontainer überall auf die Seite klicken, verschieben, Breite ändern
@@ -106,6 +107,23 @@ Voraussetzung: Android 7.0 oder neuer. Optimiert und getestet ist die App auf ei
 
 Alternativ kannst du im Reiter **App-Passwort** Benutzernamen und ein in Nextcloud erzeugtes App-Passwort eingeben. Wer erst einmal ausprobieren will, startet ohne Nextcloud und verbindet sich später in den Einstellungen.
 
+## Von OneNote umziehen
+
+Die Windows-App übernimmt Notizbücher, die in OneDrive liegen, über die offizielle OneNote-Schnittstelle von Microsoft (Microsoft Graph): **Datei → Importieren → Aus OneNote importieren …** oder der entsprechende Knopf auf dem Startbildschirm. Die Notizbücher werden als neue NextNote-Notizbücher angelegt und danach wie gewohnt mit Nextcloud synchronisiert, auch aufs Tablet. Dein OneNote bleibt unverändert.
+
+Dafür braucht NextNote einmalig eine eigene **App-Registrierung bei Microsoft**. Sie ist kostenlos und dauert ein paar Minuten:
+
+1. Auf [entra.microsoft.com](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) mit deinem Microsoft-Konto anmelden → **App-Registrierungen** → **Neue Registrierung**. Falls Microsoft dort nach einem Verzeichnis oder Mandanten fragt, kannst du über ein kostenloses Azure-Konto eines anlegen.
+2. Name beliebig (z. B. „NextNote“). Bei **Unterstützte Kontotypen** die Option mit „… und persönliche Microsoft-Konten“ wählen.
+3. Bei **Umleitungs-URI** die Plattform „Öffentlicher Client/nativ (mobil und Desktop)“ wählen und `http://localhost` eintragen → **Registrieren**.
+4. Die **Anwendungs-ID (Client)** von der Übersichtsseite kopieren und im Import-Dialog einfügen.
+
+API-Berechtigungen musst du nicht eintragen: Bei der Anmeldung im Browser fragt Microsoft, ob NextNote deine Notizbücher lesen darf (`Notes.Read`).
+
+**Was übernommen wird:** Abschnitte (Abschnittsgruppen als „Gruppe › Abschnitt“), Seiten mit Unterseiten, Erstelldatum und Titel, Textblöcke an ihrer Position mit Formatierung, Listen, Tabellen und Links, die Tags Aufgabe, Wichtig, Frage, Merken für später, Definition, Idee und Kritisch, Bilder und PDF-Ausdrucke sowie Handschrift mit Farbe, Stärke, Druckstufen und Textmarkern.
+
+**Was fehlt:** Dateianhänge (auf der Seite steht ein Hinweis mit dem Dateinamen), Audio, eingebettete Videos (werden zum Link), Seitenfarbe und -linien; Formeln kommen höchstens als einfacher Text an. Die Reihenfolge der Abschnitte gibt Microsoft nicht heraus; sie werden nach Erstelldatum sortiert und lassen sich per Ziehen umordnen. Microsoft drosselt die Abfragen, deshalb dauern große Notizbücher eine Weile. Ein Abbruch ist jederzeit möglich; bereits importierte Seiten bleiben erhalten.
+
 ## Bedienung
 
 | Aktion | So geht's |
@@ -139,7 +157,7 @@ NextNote/
 
 ## Datenschutz und Sicherheit
 
-- NextNote verbindet sich ausschließlich mit der Nextcloud, die du einträgst. Es gibt keine Telemetrie, keine Werbung und keine Drittanbieter-Dienste.
+- NextNote verbindet sich ausschließlich mit der Nextcloud, die du einträgst. Es gibt keine Telemetrie, keine Werbung und keine Drittanbieter-Dienste. Einzige Ausnahme ist der OneNote-Import, wenn du ihn startest: Dann meldet sich NextNote bei Microsoft an und liest deine Notizbücher. Der Zugriffsschlüssel dafür bleibt nur im Arbeitsspeicher, bis du den Import-Dialog schließt, und wird nur an Microsoft-Adressen geschickt.
 - Statt deines Nextcloud-Passworts speichert NextNote ein eigenes App-Passwort. Du siehst es in Nextcloud unter *Einstellungen → Sicherheit* und kannst es dort widerrufen. Beim Abmelden in NextNote wird es automatisch widerrufen.
 - Unter **Windows** ist das App-Passwort mit der Windows-Datenschutz-API (DPAPI) verschlüsselt, unter **Android** mit einem Schlüssel aus dem Android-Keystore, der das Gerät nicht verlassen kann.
 - Unter Android schließt NextNote seine Daten von Android-Backups und von der Übertragung auf ein neues Gerät aus. Auf einem neuen Gerät meldest du dich einfach neu an, und deine Notizbücher kommen aus der Nextcloud. Synchronisiere vor einem Gerätewechsel, damit keine Änderung verloren geht.
@@ -169,9 +187,10 @@ npm run icons             # App-Icons aus build-resources/icon.svg erzeugen
 | `src/sync` | WebDAV-Client, Nextcloud Login Flow v2, Sync-Engine (ETags, If-Match, Ordner-ETags, um unveränderte Notizbücher zu überspringen) |
 | `src/ink` | Stifteingabe, Gesten (Stift/Finger/Maus, Handballenerkennung, Zoom), Radierer, Lasso |
 | `src/ui`, `src/editor` | Oberfläche (React) und Rich-Text-Editor (TipTap) |
-| `electron/` | Windows-Hülle: HTTP über den Hauptprozess, App-Passwort per DPAPI verschlüsselt |
+| `src/import/onenote` | OneNote-Import: Microsoft-Anmeldung (OAuth mit PKCE), Graph-Client mit Drosselungs-Handling, Umwandlung des Seiten-HTML in Textcontainer und Bilder, InkML-Leser für die Handschrift |
+| `electron/` | Windows-Hülle: HTTP über den Hauptprozess, App-Passwort per DPAPI verschlüsselt, Microsoft-Anmeldung im Systembrowser mit Rückleitung auf `localhost` |
 | `android/` | Capacitor-Projekt mit drei eigenen Plugins: `NativeHttpPlugin` (OkHttp, weil WebDAV-Methoden wie PROPFIND und MKCOL mit dem Standard-HTTP von Capacitor nicht gehen), `NativeClipboardPlugin` (Zwischenablage inkl. Bildern) und `NativeSecureStoragePlugin` (App-Passwort, mit dem Android-Keystore verschlüsselt) |
-| `tools/` | Build-Skripte, Mock-Nextcloud, Icon-Erzeugung, End-to-End-Test der Windows-App |
+| `tools/` | Build-Skripte, Mock-Nextcloud und Mock-Microsoft-Graph für die Tests, Icon-Erzeugung, End-to-End-Test der Windows-App |
 
 ### Windows-Version bauen
 
@@ -205,7 +224,8 @@ Beide Dateien sind per `.gitignore` vom Repository ausgeschlossen. Bewahre sie s
 
 ## Grenzen der Version 1.0
 
-- Keine Handschrifterkennung (Umwandlung in Text) und kein Import von `.one`-Dateien aus OneNote
+- Keine Handschrifterkennung (Umwandlung in Text)
+- OneNote-Import nur unter Windows und nur für Notizbücher in OneDrive; `.one`-Dateien lassen sich nicht direkt öffnen
 - Keine Audioaufnahmen und keine Dateianhänge außer Bildern und PDF-Ausdrucken
 - Oberfläche nur auf Deutsch
 - Das Windows-Installationsprogramm ist nicht code-signiert

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Cloud, ExternalLink, LogOut, PenTool, Palette, RefreshCw, Info } from 'lucide-react';
+import { Cloud, ExternalLink, FileInput, LogOut, PenTool, Palette, RefreshCw, Info } from 'lucide-react';
 import { platform } from '../platform';
 import { useSettings, type ThemeMode } from '../state/settings';
 import { useUI } from '../state/ui';
@@ -7,6 +7,7 @@ import { DEFAULT_ROOT, syncManager, useSync } from '../sync/manager';
 import { checkServer, fetchUser, normalizeServerUrl, pollLoginFlow, startLoginFlow, type LoginFlow } from '../sync/nextcloud';
 import { FONTS } from '../editor/extensions';
 import { confirmDialog, Modal } from './Dialogs';
+import { oneNoteImportAvailable } from './OneNoteImport';
 import { toast } from './Toasts';
 
 const APP_VERSION = '1.0.0';
@@ -277,6 +278,21 @@ export function SettingsDialog() {
   return (
     <Modal title="Einstellungen" onClose={close} wide className="settings">
       <AccountSection />
+      <section className="settings-section">
+        <h3>
+          <FileInput size={17} /> Importieren
+        </h3>
+        {oneNoteImportAvailable() ? (
+          <div className="sync-status-line">
+            <span>Notizbücher aus Microsoft OneNote übernehmen – mit Text, Bildern, Tags und Handschrift.</span>
+            <button type="button" className="btn small" onClick={() => useUI.setState({ settingsOpen: false, importOpen: true })}>
+              Aus OneNote importieren …
+            </button>
+          </div>
+        ) : (
+          <p className="hint">Der Import aus OneNote ist in der Windows-App verfügbar. Importierte Notizbücher erscheinen danach über Nextcloud auch hier.</p>
+        )}
+      </section>
       <section className="settings-section">
         <h3>
           <PenTool size={17} /> Stift &amp; Eingabe

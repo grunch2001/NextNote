@@ -64,6 +64,14 @@ export class Repo {
   }
 
   async createNotebook(name: string, color?: string): Promise<{ notebook: Notebook; section: Section; page: PageMeta }> {
+    const notebook = await this.addNotebook(name, color);
+    const section = await this.createSection(notebook.id, 'Neuer Abschnitt');
+    const page = (await this.listPages(section.id))[0];
+    return { notebook, section, page };
+  }
+
+  /** A notebook without sections (e.g. as the target of an import). */
+  async addNotebook(name: string, color?: string): Promise<Notebook> {
     const ts = now();
     const existing = await this.listNotebooks();
     const notebook: Notebook = {
@@ -80,9 +88,7 @@ export class Repo {
       etag: null,
     };
     await this.db.notebooks.put(notebook);
-    const section = await this.createSection(notebook.id, 'Neuer Abschnitt');
-    const page = (await this.listPages(section.id))[0];
-    return { notebook, section, page };
+    return notebook;
   }
 
   async updateNotebook(id: ID, patch: NotebookPatch): Promise<void> {
@@ -126,7 +132,8 @@ export class Repo {
       .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt);
   }
 
-  async createSection(notebookId: ID, name: string, opts: { afterId?: ID } = {}): Promise<Section> {
+  /** Creates a section with one empty page (`withPage: false`: without). */
+  async createSection(notebookId: ID, name: string, opts: { afterId?: ID; withPage?: boolean } = {}): Promise<Section> {
     const ts = now();
     const sections = await this.listSections(notebookId);
     let order: number;
@@ -154,7 +161,7 @@ export class Repo {
       await this.db.sections.put(section);
       await this.markDirty(notebookId);
     });
-    await this.createPage(section.id);
+    if (opts.withPage !== false) await this.createPage(section.id);
     return section;
   }
 
@@ -272,6 +279,47 @@ export class Repo {
     await this.db.transaction('rw', this.db.pages, this.db.bodies, this.db.kv, async () => {
       await this.db.pages.put(meta);
       await this.db.bodies.put(emptyBody(meta.id));
+      await this.markDirty(section.notebookId);
+    });
+    return meta;
+  }
+
+  /** Appends a finished page (e.g. from an import) to the end of a section. */
+  async addPage(
+    sectionId: ID,
+    page: { title: string; level: number; createdAt: number; updatedAt: number; elements: PageElement[] },
+  ): Promise<PageMeta> {
+    const section = await this.db.sections.get(sectionId);
+    if (!section) throw new Error('Abschnitt nicht gefunden');
+    const ts = now();
+    const pages = await this.listPages(sectionId);
+    const body: PageBody = { id: newId(), elements: Object.fromEntries(page.elements.map((el) => [el.id, el])), tombstones: {} };
+    const meta = derivePage(
+      {
+        id: body.id,
+        notebookId: section.notebookId,
+        sectionId,
+        title: page.title,
+        order: orderBetween(pages.at(-1)?.order, undefined),
+        level: Math.max(0, Math.min(2, page.level)),
+        createdAt: page.createdAt,
+        updatedAt: page.updatedAt,
+        deletedAt: null,
+        bgColor: null,
+        rule: 'none',
+        times: { title: ts, sectionId: ts, order: ts, level: ts, deletedAt: ts, bgColor: ts, rule: ts },
+        searchText: '',
+        tags: [],
+        base: {},
+        rev: 1,
+        syncedRev: 0,
+        etag: null,
+      },
+      body,
+    );
+    await this.db.transaction('rw', this.db.pages, this.db.bodies, this.db.kv, async () => {
+      await this.db.pages.put(meta);
+      await this.db.bodies.put(body);
       await this.markDirty(section.notebookId);
     });
     return meta;

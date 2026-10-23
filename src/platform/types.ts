@@ -37,6 +37,12 @@ export interface Platform {
   onResume(cb: () => void): void;
   /** Close the in-app browser used for the login flow, if any. */
   closeLoginBrowser?(): Promise<void>;
+  /**
+   * OAuth 2.0 authorization in the system browser with a loopback redirect (Windows only).
+   * `redirect_uri` is added to `authorizeUrl`; the result names the URI that was used.
+   */
+  oauthAuthorize?(authorizeUrl: string): Promise<OAuthResult>;
+  oauthCancel?(): Promise<void>;
   /** Android hardware back button. The handler returns true if it handled the event. */
   onBackButton?(handler: () => boolean): void;
   /** Reads the system clipboard (text and, where supported, an image). */
@@ -47,6 +53,15 @@ export interface Platform {
    * without reading the content. null = unknown on this platform.
    */
   clipboardChangedSince?(time: number): Promise<boolean | null>;
+}
+
+export interface OAuthResult {
+  redirectUri: string;
+  code?: string;
+  state?: string;
+  /** OAuth error code, or 'cancelled' / 'timeout'. */
+  error?: string;
+  errorDescription?: string;
 }
 
 export interface ClipboardContent {

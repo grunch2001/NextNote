@@ -2,7 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
 import { base64ToBytes, bytesToBase64, encodeUtf8 } from '../model/util';
-import { NetworkError, type ClipboardContent, type HttpRequest, type HttpResponse, type Platform } from './types';
+import { NetworkError, type ClipboardContent, type HttpRequest, type HttpResponse, type OAuthResult, type Platform } from './types';
 
 /** API exposed by electron/preload.ts */
 export interface ElectronBridge {
@@ -10,6 +10,8 @@ export interface ElectronBridge {
     { ok: true; status: number; headers: Record<string, string>; body: Uint8Array } | { ok: false; error: string }
   >;
   openExternal(url: string): Promise<void>;
+  oauthAuthorize(authorizeUrl: string): Promise<OAuthResult>;
+  oauthCancel(): Promise<void>;
   secureGet(key: string): Promise<string | null>;
   secureSet(key: string, value: string | null): Promise<void>;
   onFocus(cb: () => void): void;
@@ -65,6 +67,8 @@ function electronPlatform(bridge: ElectronBridge): Platform {
       return { status: res.status, headers: lowerHeaders(res.headers), body: res.body };
     },
     openExternal: (url) => bridge.openExternal(url),
+    oauthAuthorize: (url) => bridge.oauthAuthorize(url),
+    oauthCancel: () => bridge.oauthCancel(),
     secureGet: (k) => bridge.secureGet(k),
     secureSet: (k, v) => bridge.secureSet(k, v),
     onResume: (cb) => bridge.onFocus(cb),

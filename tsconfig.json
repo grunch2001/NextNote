@@ -16,5 +16,6 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "tests", "tools/mockNextcloud.ts"]
+  "include": ["src", "tests", "tools/mockNextcloud.ts", "tools/mockOneNote.ts"],
+  "exclude": ["tests/oauth.test.ts"]
 }

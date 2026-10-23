@@ -1439,6 +1439,214 @@ button:disabled {
   margin: 14px 0 6px;
 }
 
+/* ------------------------------------------------------------------ OneNote import */
+
+.import-help {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.import-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--accent-text);
+}
+
+.import-help ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.import-help li {
+  margin-bottom: 4px;
+}
+
+.import-help code {
+  font-family: Consolas, 'Roboto Mono', monospace;
+  font-size: 12.5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.import-help .muted {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.import-list-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.import-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 44vh;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.import-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.import-item:hover {
+  background: var(--row-hover);
+}
+
+.import-item input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.import-item-icon {
+  color: var(--accent-text);
+  flex-shrink: 0;
+}
+
+.import-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-note {
+  margin-top: 4px;
+}
+
+.import-progress {
+  padding: 8px 0 4px;
+}
+
+.progress-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-bar > div {
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform 0.3s ease;
+}
+
+.progress-bar > div.indeterminate {
+  width: 30%;
+  border-radius: 4px;
+  animation: progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar > div.indeterminate {
+    animation: none;
+    width: 100%;
+    opacity: 0.4;
+  }
+}
+
+.import-status {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.import-current {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-summary .ok-line,
+.import-summary .warn-line,
+.import-summary .error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-weight: 600;
+  margin: 4px 0 10px;
+}
+
+.import-summary .ok-line {
+  color: var(--ok);
+}
+
+.import-summary .warn-line {
+  color: var(--warn);
+}
+
+.import-summary .error svg,
+.import-summary .warn-line svg,
+.import-summary .ok-line svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.import-counts {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+
+/* Off-screen copy of imported text, laid out like a text container to measure its height. */
+.import-measure {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  visibility: hidden;
+  max-width: 1200px;
+  font-family: var(--default-font);
+  font-size: var(--default-size);
+  line-height: 1.35;
+}
+
+.welcome-import {
+  margin-top: 10px;
+}
+
 .bin-row {
   display: flex;
   align-items: center;
