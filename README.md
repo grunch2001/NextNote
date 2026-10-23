@@ -113,10 +113,13 @@ Die Windows-App übernimmt Notizbücher, die in OneDrive liegen, über die offiz
 
 Dafür braucht NextNote einmalig eine eigene **App-Registrierung bei Microsoft**. Sie ist kostenlos und dauert ein paar Minuten:
 
-1. Auf [entra.microsoft.com](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) mit deinem Microsoft-Konto anmelden → **App-Registrierungen** → **Neue Registrierung**. Falls Microsoft dort nach einem Verzeichnis oder Mandanten fragt, kannst du über ein kostenloses Azure-Konto eines anlegen.
-2. Name beliebig (z. B. „NextNote“). Bei **Unterstützte Kontotypen** die Option mit „… und persönliche Microsoft-Konten“ wählen.
-3. Bei **Umleitungs-URI** die Plattform „Öffentlicher Client/nativ (mobil und Desktop)“ wählen und `http://localhost` eintragen → **Registrieren**.
-4. Die **Anwendungs-ID (Client)** von der Übersichtsseite kopieren und im Import-Dialog einfügen.
+1. **Eigenes Verzeichnis anlegen** (nur bei einem persönlichen Microsoft-Konto wie outlook.com oder hotmail.com): Solche Konten haben bei Microsoft kein Verzeichnis (Mandant), und ohne Verzeichnis lässt sich keine App registrieren. Auf [azure.microsoft.com/free](https://azure.microsoft.com/free) mit demselben Konto **Kostenlos starten** durchlaufen. Dabei entsteht ein „Standardverzeichnis“, in dem du Administrator bist. Telefonnummer und Kreditkarte dienen nur der Identitätsprüfung; ohne Upgrade wird nichts berechnet. Mit einem Uni- oder Arbeitskonto entfällt dieser Schritt, sofern die Organisation App-Registrierungen erlaubt.
+2. Auf [portal.azure.com](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) anmelden. Falls nötig über dein Profil oben rechts → **Verzeichnis wechseln** das neue Standardverzeichnis wählen. Dann **App-Registrierungen** → **Neue Registrierung**.
+3. Name beliebig (z. B. „NextNote“). Bei **Unterstützte Kontotypen** die Option mit „… und persönliche Microsoft-Konten“ wählen.
+4. Bei **Umleitungs-URI** die Plattform „Öffentlicher Client/nativ (mobil und Desktop)“ wählen und `http://localhost` eintragen → **Registrieren**.
+5. Die **Anwendungs-ID (Client)** von der Übersichtsseite kopieren und im Import-Dialog einfügen.
+
+Meldet das Portal „User account … from identity provider 'live.com' does not exist in tenant 'Microsoft Services'“ (AADSTS16000/AADSTS50020), fehlt Schritt 1 oder das neue Verzeichnis ist nicht ausgewählt. „Ohne Zugriffstoken fortfahren“ hilft dann nicht weiter.
 
 API-Berechtigungen musst du nicht eintragen: Bei der Anmeldung im Browser fragt Microsoft, ob NextNote deine Notizbücher lesen darf (`Notes.Read`).
 

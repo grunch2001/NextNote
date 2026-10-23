@@ -3,7 +3,7 @@ import type { JSONContent } from '@tiptap/core';
 import { CancelledError, signInMicrosoft } from '../src/import/onenote/auth';
 import { GraphClient, parseMultipart } from '../src/import/onenote/graph';
 import { convertPageHtml } from '../src/import/onenote/html';
-import { importFromOneNote } from '../src/import/onenote/importer';
+import { importFromOneNote, moveIntoView } from '../src/import/onenote/importer';
 import { decodeTrace, parseInkML } from '../src/import/onenote/inkml';
 import type { ImageElement, InkElement, TextElement } from '../src/model/types';
 import { docToText } from '../src/model/text';
@@ -315,6 +315,36 @@ describe('OneNote import', () => {
     expect(files.filter((f) => f.startsWith('NextNote/Uni/sections/'))).toHaveLength(2);
     expect(files.filter((f) => f.startsWith('NextNote/Uni/assets/'))).toHaveLength(1);
     expect(progress.at(-1)).toBe(4);
+  });
+
+  it('moves pages whose ink reaches past the left edge into view, keeping the layout', async () => {
+    const mock = new MockOneNote();
+    demoNotebook(mock);
+    // ink starts 34 px left of the page (as OneNote delivers it for strokes at the very edge)
+    const strokes = INKML.replace('2540 5080 16383, 5080 5080 32767', '-900 5080 16383, 5080 5080 32767');
+    const p1 = mock.notebooks[0].sections[0].pages[0];
+    p1.inkml = strokes;
+    const auth = await session(mock);
+    const graph = new GraphClient((r) => mock.handle(r), auth, undefined, async () => {});
+    const dev = createDevice(createServer(), 'edge');
+    await importFromOneNote({ graph, repo: dev.repo, notebooks: await graph.notebooks() });
+    const [nb] = await dev.repo.listNotebooks();
+    const [section] = await dev.repo.listSections(nb.id);
+    const [page] = await dev.repo.listPages(section.id);
+    const els = Object.values((await dev.repo.getPage(page.id))!.body.elements);
+    const pen = els.find((e): e is InkElement => e.type === 'ink' && e.tool === 'pen')!;
+    const text = els.find((e): e is TextElement => e.type === 'text')!;
+    // leftmost edge of the stroke (point minus half the pen width) now sits at the margin
+    expect(Math.min(...pen.pts.filter((_, i) => i % 3 === 0)) - pen.size / 2).toBeCloseTo(8, 0);
+    // text moved by the same amount: 41 + (8 - (-34.02 - 1.89))
+    expect(text.x).toBeCloseTo(41 + 8 + 34.02 + 1.89, 0);
+    expect(text.y).toBe(116);
+  });
+
+  it('leaves pages alone whose content is inside the page', () => {
+    const els = [{ id: 'a', type: 'text' as const, x: 8, y: 120, w: null, doc: { type: 'doc' }, z: 1, updatedAt: 1 }];
+    expect(moveIntoView(els)).toBe(els);
+    expect(moveIntoView([{ ...els[0], x: -10, y: -2 }])[0]).toMatchObject({ x: 8, y: 8 });
   });
 
   it('refreshes an expired token and keeps going', async () => {

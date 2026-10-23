@@ -4,6 +4,7 @@
  * images and ink; the regular sync then uploads everything to Nextcloud.
  */
 import type { Repo } from '../../db/repo';
+import { translateElement } from '../../ink/geometry';
 import type { ID, PageElement } from '../../model/types';
 import { newId, now } from '../../model/util';
 import { CancelledError, MsAuthError } from './auth';
@@ -57,6 +58,8 @@ export interface ImportOptions {
 
 /** Width for images whose size the page does not state. */
 const DEFAULT_IMAGE_WIDTH = 640;
+/** Minimum distance of imported content from the left and top edge of the page. */
+const EDGE_MARGIN = 8;
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -73,6 +76,32 @@ function displaySize(img: PageImage, natural: PreparedImage): { w: number; h: nu
   if (img.h) return { w: Math.round((img.h * nw) / nh), h: img.h };
   const s = Math.min(1, DEFAULT_IMAGE_WIDTH / nw);
   return { w: Math.round(nw * s), h: Math.round(nh * s) };
+}
+
+/**
+ * OneNote still shows ink that reaches a little past the left or top edge of the page (it comes with
+ * negative coordinates), NextNote cuts everything off there. Such pages are moved as a whole, so the
+ * layout stays as it was.
+ */
+export function moveIntoView(elements: PageElement[]): PageElement[] {
+  let minX = Infinity;
+  let minY = Infinity;
+  for (const el of elements) {
+    if (el.type === 'ink') {
+      const r = el.size / 2;
+      for (let i = 0; i < el.pts.length; i += 3) {
+        minX = Math.min(minX, el.pts[i] - r);
+        minY = Math.min(minY, el.pts[i + 1] - r);
+      }
+    } else {
+      minX = Math.min(minX, el.x);
+      minY = Math.min(minY, el.y);
+    }
+  }
+  const dx = minX < EDGE_MARGIN ? Math.ceil(EDGE_MARGIN - minX) : 0;
+  const dy = minY < EDGE_MARGIN ? Math.ceil(EDGE_MARGIN - minY) : 0;
+  if (!dx && !dy) return elements;
+  return elements.map((el) => translateElement(el, dx, dy));
 }
 
 export async function importFromOneNote(opts: ImportOptions): Promise<ImportSummary> {
@@ -154,7 +183,7 @@ export async function importFromOneNote(opts: ImportOptions): Promise<ImportSumm
     summary.videos += converted.videos;
     const createdAt = Date.parse(page.createdDateTime ?? '') || ts;
     const updatedAt = Date.parse(page.lastModifiedDateTime ?? '') || createdAt;
-    await repo.addPage(sectionId, { title: page.title ?? converted.title, level: page.level ?? 0, createdAt, updatedAt, elements });
+    await repo.addPage(sectionId, { title: page.title ?? converted.title, level: page.level ?? 0, createdAt, updatedAt, elements: moveIntoView(elements) });
   };
 
   try {

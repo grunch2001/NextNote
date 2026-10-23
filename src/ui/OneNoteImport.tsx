@@ -11,7 +11,8 @@ import { prepareImage } from './assets';
 import { confirmDialog, Modal } from './Dialogs';
 
 const CLIENT_ID_KEY = 'nextnote.onenoteClientId';
-const REGISTRATIONS_URL = 'https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade';
+const AZURE_FREE_URL = 'https://azure.microsoft.com/free';
+const REGISTRATIONS_URL = 'https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade';
 const STORED_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
 export const oneNoteImportAvailable = () => !!platform.oauthAuthorize;
@@ -224,11 +225,20 @@ function ImportDialog() {
           <summary>So erstellst du die App-Registrierung (einmalig)</summary>
           <ol>
             <li>
-              Bei{' '}
-              <button type="button" className="link-btn" onClick={() => void platform.openExternal(REGISTRATIONS_URL)}>
-                entra.microsoft.com <ExternalLink size={12} />
+              Ein persönliches Microsoft-Konto braucht zuerst ein eigenes Verzeichnis: auf{' '}
+              <button type="button" className="link-btn" onClick={() => void platform.openExternal(AZURE_FREE_URL)}>
+                azure.microsoft.com/free <ExternalLink size={12} />
               </button>{' '}
-              mit deinem Microsoft-Konto anmelden und unter „App-Registrierungen“ auf „Neue Registrierung“ klicken.
+              mit diesem Konto „Kostenlos starten“ durchlaufen. Telefonnummer und Kreditkarte dienen dort nur der Identitätsprüfung; ohne Upgrade kostet es
+              nichts. Mit einem Uni- oder Arbeitskonto entfällt dieser Schritt, sofern die Organisation App-Registrierungen erlaubt.
+            </li>
+            <li>
+              Auf{' '}
+              <button type="button" className="link-btn" onClick={() => void platform.openExternal(REGISTRATIONS_URL)}>
+                portal.azure.com <ExternalLink size={12} />
+              </button>{' '}
+              anmelden, falls nötig über dein Profil oben rechts → „Verzeichnis wechseln“ das neue „Standardverzeichnis“ wählen, dann „App-Registrierungen“ →
+              „Neue Registrierung“.
             </li>
             <li>Name z. B. „NextNote“. Bei „Unterstützte Kontotypen“ die Option mit „… und persönliche Microsoft-Konten“ wählen.</li>
             <li>
@@ -238,7 +248,8 @@ function ImportDialog() {
             <li>Die „Anwendungs-ID (Client)“ von der Übersichtsseite kopieren und oben einfügen.</li>
           </ol>
           <p className="muted">
-            Berechtigungen musst du nicht eintragen – bei der Anmeldung fragt Microsoft, ob NextNote deine Notizbücher lesen darf. NextNote speichert dabei kein
+            Meldet das Portal „… does not exist in tenant 'Microsoft Services'“, fehlt Schritt 1 oder das neue Verzeichnis ist nicht ausgewählt. Berechtigungen
+            musst du nicht eintragen – bei der Anmeldung fragt Microsoft, ob NextNote deine Notizbücher lesen darf. NextNote speichert dabei kein
             Microsoft-Passwort; der Zugriff gilt nur für diesen Import.
           </p>
         </details>
