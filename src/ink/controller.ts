@@ -452,7 +452,7 @@ export class CanvasController {
       case 'shape': {
         if (Math.hypot(g.x1 - g.x0, g.y1 - g.y0) > 3) {
           const ts = now();
-          const r1 = (n: number) => Math.round(n * 10) / 10;
+          const r1 = (n: number) => Math.round(Math.max(0, n) * 10) / 10;
           const el: InkElement = {
             id: newId(),
             type: 'ink',
@@ -504,7 +504,8 @@ export class CanvasController {
     const end = this.toPage(e.clientX, e.clientY);
     const n = g.pts.length;
     if (Math.hypot(end.x - g.pts[n - 3], end.y - g.pts[n - 2]) * this.zoom > 1) g.pts.push(end.x, end.y, g.pts[n - 1]);
-    const r1 = (v: number) => Math.round(v * 10) / 10;
+    // a stroke that leaves the page (e.g. into the page list) runs along its edge instead
+    const r1 = (v: number) => Math.round(Math.max(0, v) * 10) / 10;
     const pts: number[] = [];
     for (let i = 0; i < g.pts.length; i += 3) pts.push(r1(g.pts[i]), r1(g.pts[i + 1]), g.pts[i + 2]);
     if (pts.length === 3) pts.push(pts[0] + 0.1, pts[1] + 0.1, pts[2]);

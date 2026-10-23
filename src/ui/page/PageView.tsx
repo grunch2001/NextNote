@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { repo } from '../../state/repo';
 import { CanvasController } from '../../ink/controller';
-import { elementBounds, translateElement, unionRect } from '../../ink/geometry';
+import { elementBounds, elementsOrigin, translateElement, unionRect } from '../../ink/geometry';
 import { ClipboardPaste, SquareDashedMousePointer, Type } from 'lucide-react';
 import { editorsById, setLastInputKind, targetEditor } from '../../editor/active';
 import { paragraphDoc } from '../../model/text';
@@ -365,9 +365,16 @@ export function PageView() {
       } else if (sel.length && e.key.startsWith('Arrow')) {
         e.preventDefault();
         const step = e.shiftKey ? 10 : 1;
-        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
-        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+        let dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+        let dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
         const els = usePage.getState().elements;
+        // not past the left or top edge of the page
+        const o = elementsOrigin(sel.map((id) => els[id]).filter((el): el is PageElement => !!el));
+        if (o) {
+          dx = Math.max(dx, -o.x);
+          dy = Math.max(dy, -o.y);
+        }
+        if (!dx && !dy) return;
         const patches: Record<ID, ReturnType<typeof translateElement>> = {};
         for (const id of sel) if (els[id]) patches[id] = translateElement(els[id], dx, dy);
         pageActions.replace(patches);

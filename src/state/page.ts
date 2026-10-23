@@ -4,7 +4,7 @@ import { repo } from './repo';
 import { mergeBodies } from '../model/merge';
 import type { ID, PageElement } from '../model/types';
 import { debounce, now } from '../model/util';
-import { scaleElement, translateElement } from '../ink/geometry';
+import { elementsOrigin, scaleElement, translateElement } from '../ink/geometry';
 
 type Snapshot = Record<ID, PageElement | null>;
 
@@ -122,6 +122,21 @@ function record(op: Op) {
     return;
   }
   usePage.setState((s) => ({ undoStack: [...s.undoStack.slice(-199), op], redoStack: [] }));
+}
+
+let originCache: { selection: ID[]; elements: Record<ID, PageElement>; origin: { x: number; y: number } | null } | null = null;
+
+/** Limits a live move/scale of the selection so that it does not go past the left or top edge. */
+function clampToPage(drag: DragTransform): DragTransform {
+  const { selection, elements } = usePage.getState();
+  if (originCache?.selection !== selection || originCache.elements !== elements) {
+    originCache = { selection, elements, origin: elementsOrigin(selection.map((id) => elements[id]).filter((el): el is PageElement => !!el)) };
+  }
+  const o = originCache.origin;
+  if (!o) return drag;
+  const x = drag.ox + (o.x - drag.ox) * drag.s;
+  const y = drag.oy + (o.y - drag.oy) * drag.s;
+  return { ...drag, dx: Math.max(drag.dx, -x), dy: Math.max(drag.dy, -y) };
 }
 
 function change(snap: Snapshot, undoable = true) {
@@ -275,7 +290,7 @@ export const pageActions = {
   },
 
   setDrag(drag: DragTransform | null) {
-    usePage.setState({ drag });
+    usePage.setState({ drag: drag && clampToPage(drag) });
   },
 
   /** Bakes the live drag transform into the selected elements (one undo step). */

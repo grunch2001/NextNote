@@ -147,7 +147,7 @@ export const TextContainer = memo(function TextContainer({ el, selected, drag, o
       const dy = (ev.clientY - startY) / z;
       if (!moved && Math.hypot(dx, dy) < 2) return;
       moved = true;
-      pageActions.update({ [el.id]: { x: Math.round(x0 + dx), y: Math.round(Math.max(0, y0 + dy)) } });
+      pageActions.update({ [el.id]: { x: Math.round(Math.max(0, x0 + dx)), y: Math.round(Math.max(0, y0 + dy)) } });
     };
     const onUp = () => {
       target.removeEventListener('pointermove', onMove);

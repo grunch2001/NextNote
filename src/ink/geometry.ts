@@ -254,6 +254,27 @@ export function translateElement<T extends PageElement>(el: T, dx: number, dy: n
   return { ...el, x: round1((el as { x: number }).x + dx), y: round1((el as { y: number }).y + dy) };
 }
 
+/**
+ * Top-left corner of where elements sit: text box and image corners, ink points (without the stroke
+ * width). Nothing may go left of or above 0, the page is cut off there.
+ */
+export function elementsOrigin(els: Iterable<PageElement>): { x: number; y: number } | null {
+  let x = Infinity;
+  let y = Infinity;
+  for (const el of els) {
+    if (el.type === 'ink') {
+      for (let i = 0; i + 1 < el.pts.length; i += 3) {
+        if (el.pts[i] < x) x = el.pts[i];
+        if (el.pts[i + 1] < y) y = el.pts[i + 1];
+      }
+    } else {
+      x = Math.min(x, el.x);
+      y = Math.min(y, el.y);
+    }
+  }
+  return x === Infinity ? null : { x, y };
+}
+
 /** Scales an element around origin (ox, oy). Text boxes are only moved. */
 export function scaleElement<T extends PageElement>(el: T, ox: number, oy: number, s: number): T {
   if (el.type === 'ink') {
