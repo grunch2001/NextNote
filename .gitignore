@@ -10,3 +10,4 @@ android/build
 *.keystore
 keystore.properties
 ClaudeCodeInput
+.impeccable
