@@ -53,6 +53,8 @@ interface TouchPt {
 }
 
 const PALM_MS = 700;
+/** The S Pen counts as "in use" this long after its last event (hover included). */
+const PEN_NEAR_MS = 1500;
 const TAP_SLOP = 9;
 const LONG_PRESS_MS = 520;
 
@@ -117,6 +119,10 @@ export class CanvasController {
     return useUI.getState().zoom;
   }
 
+  private penNear() {
+    return this.penDown || performance.now() - this.lastPenTime < PEN_NEAR_MS;
+  }
+
   toPage(cx: number, cy: number) {
     const r = this.d.page.getBoundingClientRect();
     const z = this.zoom;
@@ -155,7 +161,11 @@ export class CanvasController {
     const ui = useUI.getState();
     const st = useSettings.getState();
     let tool: Tool | 'pen-auto' = ui.tool;
-    if (isPen && ((e.buttons & 32) !== 0 || e.button === 5 || (st.penButtonErases && (e.buttons & 2) !== 0))) tool = 'eraser';
+    const penButton = isPen
+      ? (e.buttons & 32) !== 0 || e.button === 5 || (st.penButtonErases && (e.buttons & 2) !== 0)
+      : // Android may deliver the held S Pen side button as a right click
+        e.pointerType === 'mouse' && e.button === 2 && st.penButtonErases && this.penNear();
+    if (penButton) tool = 'eraser';
     else if (isPen && tool === 'select' && st.penAlwaysDraws && !target.closest('.ProseMirror-focused, input, textarea, select')) tool = 'pen-auto';
 
     if (isTouch && !(INK_TOOLS.has(tool as Tool) && st.drawWithFinger)) {
@@ -169,7 +179,7 @@ export class CanvasController {
       this.gesture = { kind: 'mpan', pointerId: e.pointerId, lx: e.clientX, ly: e.clientY };
       return;
     }
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.pointerType === 'mouse' && e.button !== 0 && !penButton) return;
 
     switch (tool) {
       case 'pen':
@@ -770,9 +780,10 @@ export class CanvasController {
     if (isTextTarget(t)) return; // native menu (copy, paste, spelling) inside text
     e.preventDefault();
     if (isOwnPointer(t) || t.closest('.text-container')) return;
-    // touch long presses are handled by our own timer, pen buttons erase
+    // touch long presses are handled by our own timer; the pen never opens the menu (its side button erases),
+    // even when the WebView does not report the event as pen input
     const pt = (e as PointerEvent).pointerType;
-    if (pt === 'touch' || pt === 'pen' || this.touches.size > 0 || performance.now() - this.lastLongPress < 1000) return;
+    if (pt === 'touch' || pt === 'pen' || this.gesture || this.penNear() || this.touches.size > 0 || performance.now() - this.lastLongPress < 1000) return;
     this.d.onPageMenu(e.clientX, e.clientY);
   };
 
