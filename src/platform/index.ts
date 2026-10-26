@@ -33,6 +33,10 @@ interface NativeClipboardPlugin {
   writeText(opts: { text: string }): Promise<void>;
 }
 
+interface NativePenPlugin {
+  setButtonErases(opts: { enabled: boolean }): Promise<void>;
+}
+
 interface NativeSecureStoragePlugin {
   get(opts: { key: string }): Promise<{ value?: string }>;
   set(opts: { key: string; value: string }): Promise<void>;
@@ -84,6 +88,7 @@ function androidPlatform(): Platform {
   const NativeHttp = registerPlugin<NativeHttpPlugin>('NativeHttp');
   const NativeClipboard = registerPlugin<NativeClipboardPlugin>('NativeClipboard');
   const NativeSecureStorage = registerPlugin<NativeSecureStoragePlugin>('NativeSecureStorage');
+  const NativePen = registerPlugin<NativePenPlugin>('NativePen');
   return {
     kind: 'android',
     deviceName: 'NextNote (Android)',
@@ -167,6 +172,9 @@ function androidPlatform(): Platform {
       if (!info.hasClip) return false;
       if (!info.timestamp) return null;
       return info.timestamp > time;
+    },
+    setPenButtonErases(enabled) {
+      NativePen.setButtonErases({ enabled }).catch(() => {});
     },
   };
 }

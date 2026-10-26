@@ -161,11 +161,8 @@ export class CanvasController {
     const ui = useUI.getState();
     const st = useSettings.getState();
     let tool: Tool | 'pen-auto' = ui.tool;
-    const penButton = isPen
-      ? (e.buttons & 32) !== 0 || e.button === 5 || (st.penButtonErases && (e.buttons & 2) !== 0)
-      : // Android may deliver the held S Pen side button as a right click
-        e.pointerType === 'mouse' && e.button === 2 && st.penButtonErases && this.penNear();
-    if (penButton) tool = 'eraser';
+    // On Android the app passes strokes with the S Pen side button held as the eraser end (buttons 32)
+    if (isPen && ((e.buttons & 32) !== 0 || e.button === 5 || (st.penButtonErases && (e.buttons & 2) !== 0))) tool = 'eraser';
     else if (isPen && tool === 'select' && st.penAlwaysDraws && !target.closest('.ProseMirror-focused, input, textarea, select')) tool = 'pen-auto';
 
     if (isTouch && !(INK_TOOLS.has(tool as Tool) && st.drawWithFinger)) {
@@ -179,7 +176,7 @@ export class CanvasController {
       this.gesture = { kind: 'mpan', pointerId: e.pointerId, lx: e.clientX, ly: e.clientY };
       return;
     }
-    if (e.pointerType === 'mouse' && e.button !== 0 && !penButton) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
 
     switch (tool) {
       case 'pen':

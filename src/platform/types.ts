@@ -53,6 +53,8 @@ export interface Platform {
    * without reading the content. null = unknown on this platform.
    */
   clipboardChangedSince?(time: number): Promise<boolean | null>;
+  /** Android: strokes with the stylus side button held arrive as the eraser end of the pen. */
+  setPenButtonErases?(enabled: boolean): void;
 }
 
 export interface OAuthResult {

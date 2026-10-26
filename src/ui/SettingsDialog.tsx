@@ -303,7 +303,7 @@ export function SettingsDialog() {
           value={s.penAlwaysDraws}
           onChange={(v) => s.set('penAlwaysDraws', v)}
         />
-        <Toggle label="Seitentaste des Stifts radiert" hint="Taste gedrückt halten und über Striche fahren." value={s.penButtonErases} onChange={(v) => s.set('penButtonErases', v)} />
+        <Toggle label="Seitentaste des Stifts radiert" hint="Taste gedrückt halten, dann aufsetzen und über Striche fahren." value={s.penButtonErases} onChange={(v) => s.set('penButtonErases', v)} />
         <Toggle label="Druckempfindlichkeit" hint="Strichstärke folgt dem Andruck des Stifts." value={s.pressure} onChange={(v) => s.set('pressure', v)} />
         <Toggle
           label="Mit dem Finger zeichnen"

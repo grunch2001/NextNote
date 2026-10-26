@@ -152,6 +152,11 @@ export function App() {
   const searchOpen = useUI((s) => s.searchOpen);
   const defaultFont = useSettings((s) => s.defaultFont);
   const defaultSize = useSettings((s) => s.defaultFontSize);
+  const penButtonErases = useSettings((s) => s.penButtonErases);
+
+  useEffect(() => {
+    platform.setPenButtonErases?.(penButtonErases);
+  }, [penButtonErases]);
 
   useEffect(() => {
     const off = syncManager.onAfterSync((r) => {
