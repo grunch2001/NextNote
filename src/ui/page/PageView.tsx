@@ -11,7 +11,6 @@ import { paragraphDoc } from '../../model/text';
 import type { ID, ImageElement, PageElement, PageMeta, TextElement } from '../../model/types';
 import { debounce, newId, now } from '../../model/util';
 import { draftTexts, elementClipboard, measured, pageActions, setElementClipboard, usePage } from '../../state/page';
-import { useSettings } from '../../state/settings';
 import { useUI } from '../../state/ui';
 import { syncManager } from '../../sync/manager';
 import { platform } from '../../platform';
@@ -96,8 +95,6 @@ function PageHeader({ meta }: { meta: PageMeta }) {
 export function PageView() {
   const pageId = useUI((s) => s.pageId);
   const zoom = useUI((s) => s.zoom);
-  // canvas context attributes are fixed, so switching needs a new canvas
-  const lowLatencyInk = useSettings((s) => s.inkLowLatency);
   const meta = useLiveQuery(() => (pageId ? db.pages.get(pageId) : undefined), [pageId]);
   const elements = usePage((s) => s.elements);
   const loadedId = usePage((s) => s.pageId);
@@ -338,7 +335,7 @@ export function PageView() {
       c.destroy();
       controllerRef.current = null;
     };
-  }, [createTextAt, pageId, !!meta, lowLatencyInk]);
+  }, [createTextAt, pageId, !!meta]);
 
   // keyboard, clipboard, drag & drop
   useEffect(() => {
@@ -518,7 +515,7 @@ export function PageView() {
           </div>
         </div>
       </div>
-      <canvas key={lowLatencyInk ? 'desync' : 'sync'} ref={canvasRef} className="live-ink" />
+      <canvas ref={canvasRef} className="live-ink" />
       {zoom !== 1 && (
         <button type="button" className="zoom-badge" onClick={() => useUI.getState().setZoom(1)} title="Zoom zurücksetzen">
           {Math.round(zoom * 100)} %

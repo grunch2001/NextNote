@@ -19,8 +19,6 @@ export interface Settings {
   /** Use stylus pressure for the line width. */
   pressure: boolean;
   inkPrediction: InkPrediction;
-  /** Draw the live stroke on a desynchronized canvas (lower latency, not in step with the page). */
-  inkLowLatency: boolean;
   /** Show dark ink as light in dark mode. */
   invertInkInDark: boolean;
   defaultFont: string;
@@ -38,7 +36,6 @@ export const useSettings = create<Settings>()(
       penButtonErases: true,
       pressure: true,
       inkPrediction: 'moderate',
-      inkLowLatency: false,
       invertInkInDark: true,
       defaultFont: 'Calibri',
       defaultFontSize: 11,

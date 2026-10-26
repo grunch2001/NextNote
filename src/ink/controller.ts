@@ -60,8 +60,6 @@ const LONG_PRESS_MS = 520;
 /** Chrome predicts up to 25 ms ahead, which overshoots in curves and snaps back; use only the near future. */
 const PREDICT_MS = 12;
 const PREDICT_MAX = 4;
-/** A desynchronized canvas reaches the screen before the page; keep finished strokes on it this long. */
-const HANDOFF_HOLD_MS = 120;
 /** Never wait longer than this for the SVG version of a finished stroke. */
 const HANDOFF_MAX_MS = 1000;
 
@@ -86,14 +84,12 @@ export class CanvasController {
   private longPressed = false;
   private lastLongPress = -1e9;
   private ctx: CanvasRenderingContext2D;
-  private desync: boolean;
-  /** Finished strokes that stay on the canvas until their SVG version is on screen (shown: time it appeared in the DOM). */
-  private handoff: { el: InkElement; t0: number; shown: number }[] = [];
+  /** Finished strokes that stay on the canvas until their SVG version is in the page. */
+  private handoff: { el: InkElement; t0: number }[] = [];
 
   constructor(private d: ControllerDeps) {
-    const lowLatency = useSettings.getState().inkLowLatency;
-    this.ctx = ((lowLatency && d.canvas.getContext('2d', { desynchronized: true })) || d.canvas.getContext('2d')) as CanvasRenderingContext2D;
-    this.desync = lowLatency && !!this.ctx.getContextAttributes?.().desynchronized;
+    // not desynchronized: the canvas has to change in the same frame as the page, or finished strokes flicker
+    this.ctx = d.canvas.getContext('2d') as CanvasRenderingContext2D;
     const s = d.scroller;
     s.addEventListener('pointerdown', this.onDown, { capture: true });
     s.addEventListener('pointermove', this.onMove);
@@ -570,7 +566,7 @@ export class CanvasController {
 
   /** Keeps a finished stroke on the canvas, in its final shape, until the SVG layer shows it. */
   private handOff(el: InkElement) {
-    this.handoff.push({ el, t0: performance.now(), shown: 0 });
+    this.handoff.push({ el, t0: performance.now() });
     this.scheduleRender();
   }
 
@@ -942,20 +938,15 @@ export class CanvasController {
     }
   };
 
-  /** Finished strokes still waiting for their SVG version; drops the ones that are on screen (or gone). */
+  /** Finished strokes still waiting for their SVG version; drops the ones that are in the page (or gone). */
   private pendingHandoff(): InkElement[] {
     if (!this.handoff.length) return [];
     const t = performance.now();
     const { elements } = usePage.getState();
     this.handoff = this.handoff.filter((h) => {
       if (!elements[h.el.id] || t - h.t0 > HANDOFF_MAX_MS) return false; // undone, another page or never shown
-      if (!h.shown) {
-        if (!this.d.page.querySelector(`.ink-layer [data-id="${h.el.id}"]`)) return true;
-        h.shown = t;
-      }
-      // a normal canvas changes in the same frame as the page; a desynchronized one gets to the screen
-      // before the page has rasterized the new SVG path
-      return this.desync && t - h.shown < HANDOFF_HOLD_MS;
+      // once the path is in the page, canvas and SVG change in the same frame
+      return !this.d.page.querySelector(`.ink-layer [data-id="${h.el.id}"]`);
     });
     return this.handoff.map((h) => h.el);
   }

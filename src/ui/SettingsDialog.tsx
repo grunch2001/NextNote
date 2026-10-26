@@ -314,12 +314,6 @@ export function SettingsDialog() {
           </select>
         </label>
         <Toggle
-          label="Niedrige Latenz beim Zeichnen"
-          hint="Zeichnet den Strich am normalen Seitenaufbau vorbei. Je nach Gerät schneller, kann aber beim Absetzen flackern."
-          value={s.inkLowLatency}
-          onChange={(v) => s.set('inkLowLatency', v)}
-        />
-        <Toggle
           label="Mit dem Finger zeichnen"
           hint="Aus: Finger scrollen und zoomen, nur der Stift zeichnet (Handballenerkennung)."
           value={s.drawWithFinger}
