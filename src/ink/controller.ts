@@ -57,6 +57,13 @@ const PALM_MS = 700;
 const PEN_NEAR_MS = 1500;
 const TAP_SLOP = 9;
 const LONG_PRESS_MS = 520;
+/** Chrome predicts up to 25 ms ahead, which overshoots in curves and snaps back; use only the near future. */
+const PREDICT_MS = 12;
+const PREDICT_MAX = 4;
+/** A desynchronized canvas reaches the screen before the page; keep finished strokes on it this long. */
+const HANDOFF_HOLD_MS = 120;
+/** Never wait longer than this for the SVG version of a finished stroke. */
+const HANDOFF_MAX_MS = 1000;
 
 const isTextTarget = (t: Element) => !!t.closest('.text-container .ProseMirror, input, textarea, select, [contenteditable="true"]');
 const isOwnPointer = (t: Element) => !!t.closest('[data-own-pointer], button, a[href]');
@@ -79,9 +86,14 @@ export class CanvasController {
   private longPressed = false;
   private lastLongPress = -1e9;
   private ctx: CanvasRenderingContext2D;
+  private desync: boolean;
+  /** Finished strokes that stay on the canvas until their SVG version is on screen (shown: time it appeared in the DOM). */
+  private handoff: { el: InkElement; t0: number; shown: number }[] = [];
 
   constructor(private d: ControllerDeps) {
-    this.ctx = (d.canvas.getContext('2d', { desynchronized: true }) ?? d.canvas.getContext('2d')) as CanvasRenderingContext2D;
+    const lowLatency = useSettings.getState().inkLowLatency;
+    this.ctx = ((lowLatency && d.canvas.getContext('2d', { desynchronized: true })) || d.canvas.getContext('2d')) as CanvasRenderingContext2D;
+    this.desync = lowLatency && !!this.ctx.getContextAttributes?.().desynchronized;
     const s = d.scroller;
     s.addEventListener('pointerdown', this.onDown, { capture: true });
     s.addEventListener('pointermove', this.onMove);
@@ -364,11 +376,7 @@ export class CanvasController {
           g.pts.push(p.x, p.y, this.pressureOf(ev));
         }
         g.moved = Math.max(g.moved, Math.hypot(e.clientX - g.sx, e.clientY - g.sy));
-        g.predicted = [];
-        for (const ev of e.getPredictedEvents?.() ?? []) {
-          const p = this.toPage(ev.clientX, ev.clientY);
-          g.predicted.push(p.x, p.y, this.pressureOf(ev));
-        }
+        g.predicted = this.prediction(e, events[events.length - 1], g);
         this.scheduleRender();
         return;
       }
@@ -431,6 +439,41 @@ export class CanvasController {
     }
   };
 
+  /** Predicted continuation of the live stroke (hides input latency), see the inkPrediction setting. */
+  private prediction(e: PointerEvent, last: PointerEvent, g: DrawGesture): number[] {
+    const mode = useSettings.getState().inkPrediction;
+    const list = mode === 'off' ? [] : (e.getPredictedEvents?.() ?? []);
+    const out: number[] = [];
+    if (mode === 'full') {
+      for (const ev of list) {
+        const p = this.toPage(ev.clientX, ev.clientY);
+        out.push(p.x, p.y, this.pressureOf(ev));
+      }
+      return out;
+    }
+    const n = g.pts.length;
+    if (!list.length || n < 6) return out;
+    // direction of the last few page units of the stroke
+    const lx = g.pts[n - 3];
+    const ly = g.pts[n - 2];
+    let i = n - 6;
+    while (i > 0 && Math.hypot(lx - g.pts[i], ly - g.pts[i + 1]) < 3 / this.zoom) i -= 3;
+    const dx = lx - g.pts[i];
+    const dy = ly - g.pts[i + 1];
+    const dl = Math.hypot(dx, dy);
+    for (const ev of list) {
+      if (ev.timeStamp - last.timeStamp > PREDICT_MS || out.length >= PREDICT_MAX * 3) break;
+      const p = this.toPage(ev.clientX, ev.clientY);
+      const px = p.x - lx;
+      const py = p.y - ly;
+      const pl = Math.hypot(px, py);
+      // turning by more than ~45°: the prediction is unreliable
+      if (pl && (px * dx + py * dy) / (pl * dl) < 0.7) break;
+      out.push(p.x, p.y, g.pts[n - 1]);
+    }
+    return out;
+  }
+
   private onUp = (e: PointerEvent) => {
     if (e.pointerType === 'pen') {
       this.penDown = false;
@@ -474,6 +517,7 @@ export class CanvasController {
           };
           pageActions.add([el]);
           setLastInputKind('page');
+          this.handOff(el);
         }
         break;
       }
@@ -521,8 +565,13 @@ export class CanvasController {
     if (g.sim) el.sim = true;
     pageActions.add([el]);
     setLastInputKind('page');
-    // keep the live stroke until React painted the SVG version
-    requestAnimationFrame(() => requestAnimationFrame(() => this.scheduleRender()));
+    this.handOff(el);
+  }
+
+  /** Keeps a finished stroke on the canvas, in its final shape, until the SVG layer shows it. */
+  private handOff(el: InkElement) {
+    this.handoff.push({ el, t0: performance.now(), shown: 0 });
+    this.scheduleRender();
   }
 
   /** A short pen tap in "pen always draws" mode acts like a click. */
@@ -809,8 +858,9 @@ export class CanvasController {
     const ctx = this.ctx;
     this.clearCanvas();
     const g = this.gesture;
+    const finished = this.pendingHandoff();
     const showHover = !g && this.hover && useUI.getState().tool === 'eraser';
-    if (!g && !showHover) return;
+    if (!g && !showHover && !finished.length) return;
     const pr = this.d.page.getBoundingClientRect();
     const cr = c.getBoundingClientRect();
     const z = this.zoom;
@@ -819,6 +869,11 @@ export class CanvasController {
     const invert = useSettings.getState().invertInkInDark;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    if (finished.length) {
+      const pressure = useSettings.getState().pressure;
+      for (const el of finished) this.drawFinished(el, dark, invert, pressure);
+      this.scheduleRender(); // until the SVG layer shows them
+    }
     if (showHover && this.hover) {
       this.drawEraserCursor(this.hover.x, this.hover.y, useUI.getState().eraserSize / 2 / z);
       return;
@@ -852,9 +907,7 @@ export class CanvasController {
           z: 0,
           updatedAt: 0,
         };
-        ctx.strokeStyle = displayInkColor(g.color, dark, invert);
-        ctx.lineWidth = g.size;
-        ctx.stroke(new Path2D(inkGeometry(el, false).d));
+        this.drawFinished(el, dark, invert, false);
         break;
       }
       case 'erase':
@@ -888,6 +941,41 @@ export class CanvasController {
         break;
     }
   };
+
+  /** Finished strokes still waiting for their SVG version; drops the ones that are on screen (or gone). */
+  private pendingHandoff(): InkElement[] {
+    if (!this.handoff.length) return [];
+    const t = performance.now();
+    const { elements } = usePage.getState();
+    this.handoff = this.handoff.filter((h) => {
+      if (!elements[h.el.id] || t - h.t0 > HANDOFF_MAX_MS) return false; // undone, another page or never shown
+      if (!h.shown) {
+        if (!this.d.page.querySelector(`.ink-layer [data-id="${h.el.id}"]`)) return true;
+        h.shown = t;
+      }
+      // a normal canvas changes in the same frame as the page; a desynchronized one gets to the screen
+      // before the page has rasterized the new SVG path
+      return this.desync && t - h.shown < HANDOFF_HOLD_MS;
+    });
+    return this.handoff.map((h) => h.el);
+  }
+
+  /** Draws a stroke exactly like the SVG layer (InkLayer) does. */
+  private drawFinished(el: InkElement, dark: boolean, invert: boolean, pressure: boolean) {
+    const ctx = this.ctx;
+    const geo = inkGeometry(el, pressure);
+    const color = displayInkColor(el.color, dark, invert);
+    if (geo.mode === 'fill') {
+      ctx.fillStyle = color;
+      ctx.fill(new Path2D(geo.d));
+      return;
+    }
+    ctx.globalAlpha = el.tool === 'highlighter' ? HIGHLIGHTER_OPACITY : 1;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = el.size;
+    ctx.stroke(new Path2D(geo.d));
+    ctx.globalAlpha = 1;
+  }
 
   private drawEraserCursor(x: number, y: number, r: number) {
     const ctx = this.ctx;

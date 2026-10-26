@@ -25,10 +25,12 @@ const InkPath = memo(function InkPath({
   const geo = inkGeometry(el, pressure);
   const color = displayInkColor(el.color, dark, invert);
   const cls = selected ? 'ink selected' : 'ink';
-  if (geo.mode === 'fill') return <path className={cls} d={geo.d} fill={color} />;
+  // data-id: the live canvas keeps a finished stroke until its path is here
+  if (geo.mode === 'fill') return <path className={cls} data-id={el.id} d={geo.d} fill={color} />;
   return (
     <path
       className={cls}
+      data-id={el.id}
       d={geo.d}
       fill="none"
       stroke={color}

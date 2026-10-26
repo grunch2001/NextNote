@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 import { platform } from '../platform';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
+/** How far ahead of the pen the live stroke is drawn (browser prediction). */
+export type InkPrediction = 'off' | 'moderate' | 'full';
 
 export interface Settings {
   theme: ThemeMode;
@@ -16,6 +18,9 @@ export interface Settings {
   penButtonErases: boolean;
   /** Use stylus pressure for the line width. */
   pressure: boolean;
+  inkPrediction: InkPrediction;
+  /** Draw the live stroke on a desynchronized canvas (lower latency, not in step with the page). */
+  inkLowLatency: boolean;
   /** Show dark ink as light in dark mode. */
   invertInkInDark: boolean;
   defaultFont: string;
@@ -32,6 +37,8 @@ export const useSettings = create<Settings>()(
       drawWithFinger: false,
       penButtonErases: true,
       pressure: true,
+      inkPrediction: 'moderate',
+      inkLowLatency: false,
       invertInkInDark: true,
       defaultFont: 'Calibri',
       defaultFontSize: 11,

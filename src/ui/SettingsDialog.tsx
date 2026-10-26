@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Cloud, ExternalLink, FileInput, LogOut, PenTool, Palette, RefreshCw, Info } from 'lucide-react';
 import { platform } from '../platform';
-import { useSettings, type ThemeMode } from '../state/settings';
+import { useSettings, type InkPrediction, type ThemeMode } from '../state/settings';
 import { useUI } from '../state/ui';
 import { DEFAULT_ROOT, syncManager, useSync } from '../sync/manager';
 import { checkServer, fetchUser, normalizeServerUrl, pollLoginFlow, startLoginFlow, type LoginFlow } from '../sync/nextcloud';
@@ -305,6 +305,20 @@ export function SettingsDialog() {
         />
         <Toggle label="Seitentaste des Stifts radiert" hint="Taste gedrückt halten, dann aufsetzen und über Striche fahren." value={s.penButtonErases} onChange={(v) => s.set('penButtonErases', v)} />
         <Toggle label="Druckempfindlichkeit" hint="Strichstärke folgt dem Andruck des Stifts." value={s.pressure} onChange={(v) => s.set('pressure', v)} />
+        <label className="field">
+          <span>Strichvorhersage</span>
+          <select value={s.inkPrediction} onChange={(e) => s.set('inkPrediction', e.target.value as InkPrediction)}>
+            <option value="off">Aus – Linie folgt leicht verzögert</option>
+            <option value="moderate">Gemäßigt (empfohlen)</option>
+            <option value="full">Stark – Spitze eilt voraus, korrigiert nach</option>
+          </select>
+        </label>
+        <Toggle
+          label="Niedrige Latenz beim Zeichnen"
+          hint="Zeichnet den Strich am normalen Seitenaufbau vorbei. Je nach Gerät schneller, kann aber beim Absetzen flackern."
+          value={s.inkLowLatency}
+          onChange={(v) => s.set('inkLowLatency', v)}
+        />
         <Toggle
           label="Mit dem Finger zeichnen"
           hint="Aus: Finger scrollen und zoomen, nur der Stift zeichnet (Handballenerkennung)."
