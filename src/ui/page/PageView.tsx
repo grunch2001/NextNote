@@ -150,6 +150,9 @@ export function PageView() {
   const pdf = opened?.pdf ?? null;
   const pdfPages = pdf?.pages ?? null;
   const layout = useMemo(() => (pdfPages ? pdfLayout(pdfPages) : null), [pdfPages]);
+  // the scroll area exists (a PDF that is still being loaded shows a placeholder instead):
+  // the effects below attach to it and have to run again once it appears
+  const viewMounted = !!opened && (!pdf || !!layout);
   const elements = usePage((s) => s.elements);
   const loadedId = usePage((s) => s.pageId);
   const selection = usePage((s) => s.selection);
@@ -193,7 +196,7 @@ export function PageView() {
     ro.observe(s);
     setView({ w: s.offsetWidth, h: s.offsetHeight });
     return () => ro.disconnect();
-  }, [pageId, !!opened]);
+  }, [pageId, viewMounted]);
 
   const createTextAt = useCallback((x: number, y: number, doc?: TextElement['doc']): ID | null => {
     const s = usePage.getState();
@@ -394,7 +397,7 @@ export function PageView() {
       c.destroy();
       controllerRef.current = null;
     };
-  }, [createTextAt, pageId, !!opened]);
+  }, [createTextAt, pageId, viewMounted]);
 
   // keyboard, clipboard, drag & drop
   useEffect(() => {
@@ -511,7 +514,7 @@ export function PageView() {
       scroller?.removeEventListener('dragover', onDragOver);
       scroller?.removeEventListener('drop', onDrop);
     };
-  }, [createTextAt, insertImages, insertPdf, pasteElements, viewCenter, pageId, !!opened]);
+  }, [createTextAt, insertImages, insertPdf, pasteElements, viewCenter, pageId, viewMounted]);
 
   // scroll to the top when another page opens
   useEffect(() => {

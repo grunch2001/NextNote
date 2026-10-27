@@ -19,14 +19,21 @@
   <img src="docs/screenshots/hero.png" alt="NextNote unter Windows: Notizbücher links, Seitenliste, eine Mathe-Seite mit Text, Tags und handgezeichnetem Funktionsgraphen" width="900">
 </p>
 
-> **English:** NextNote is a OneNote-style note-taking app for Windows and Android with pen input. Notebooks are stored as plain JSON files in your own Nextcloud and synced between devices. The user interface is currently German only.
+> **English:** NextNote is a OneNote-style note-taking app for Windows and Android with pen input. Notebooks are stored as plain JSON files in your own Nextcloud and synced between devices. PDFs from any Nextcloud folder can be annotated and are saved back as PDF files with standard annotations. The user interface is currently German only.
 
 ## Warum NextNote?
 
 - **Deine Daten, dein Server.** Die Notizen liegen als lesbare Dateien in einem Ordner deiner Nextcloud. Ein Microsoft-Konto oder eine fremde Cloud brauchst du nicht.
 - **Freie Seite wie in OneNote.** Text, Handschrift, Bilder und PDFs stehen dort auf der Seite, wo du sie hinsetzt.
 - **Stift ist kein Nachgedanke.** Druckstufen, Handballenerkennung, die S-Pen-Seitentaste als Radierer und Lasso-Auswahl.
+- **PDFs direkt in der Nextcloud beschriften.** Skripte und Übungsblätter bleiben in ihrem Ordner und werden als PDF mit Anmerkungen gespeichert, die jedes PDF-Programm anzeigt.
 - **Offline zuerst.** Alles wird lokal gespeichert und synchronisiert, sobald eine Verbindung besteht. Gleichzeitige Änderungen auf mehreren Geräten werden pro Element zusammengeführt.
+
+## Neu in Version 1.2
+
+- **PDF-Ordner aus Nextcloud:** Ein Abschnitt zeigt die PDFs eines beliebigen Nextcloud-Ordners. PDFs öffnen, mit allen Werkzeugen beschriften und als PDF in denselben Ordner zurückspeichern
+- **Notizbücher schließen und öffnen:** Notizbücher, die du auf einem Gerät gerade nicht brauchst, werden ausgeblendet und nicht synchronisiert; ihre PDFs belegen dort keinen Speicher
+- **PDFs bei Bedarf:** Eine PDF wird erst heruntergeladen, wenn du sie öffnest
 
 ## Funktionen
 
@@ -34,8 +41,8 @@
 - Notizbücher → farbige Abschnitte → Seiten mit bis zu zwei Ebenen Unterseiten
 - Verschieben per Drag & Drop oder Kontextmenü, auch zwischen Notizbüchern
 - Notizbücher lassen sich pro Gerät **schließen**: Sie verschwinden aus der Leiste, werden nicht mehr synchronisiert und ihre PDFs nicht mehr auf dem Gerät gehalten; Seiten bleiben lokal gespeichert. Über **Notizbuch öffnen** (Ordner-Symbol neben „+“) kommen sie zurück und werden dabei auf den neuesten Stand gebracht
-- Suche über alle Notizbücher mit Hervorhebung auf der Seite
-- Übersicht aller Tags und offenen Aufgaben über alle Notizbücher hinweg
+- Suche über alle geöffneten Notizbücher mit Hervorhebung auf der Seite
+- Übersicht aller Tags und offenen Aufgaben über alle geöffneten Notizbücher hinweg
 - Papierkorb (60 Tage), Rückgängig/Wiederholen
 - Seitenleisten lassen sich einklappen, damit die Seite den ganzen Bildschirm bekommt
 - **Import aus OneNote** (Windows): ganze Notizbücher mit Text, Tabellen, Tags, Bildern und Handschrift übernehmen
@@ -55,6 +62,7 @@
 - Gespeichert wird **in die PDF selbst**, im gewählten Ordner, nicht im NextNote-Ordner. Die Anmerkungen sind normale PDF-Anmerkungen: Nextcloud, Acrobat, Samsung Notes und andere PDF-Programme zeigen sie an, der Inhalt der PDF bleibt unverändert
 - Eine PDF wird erst beim ersten Öffnen heruntergeladen (in der Liste erkennbar am Wolken-Symbol) und bleibt dann auf dem Gerät, solange das Notizbuch geöffnet ist. Hochgeladen wird, wenn du die PDF schließt, nach 30 Sekunden ohne Eingabe, wenn die App in den Hintergrund geht oder mit Strg+S
 - Haben zwei Geräte dieselbe PDF gleichzeitig beschriftet, werden die Anmerkungen zusammengeführt
+- Auch PDFs, die nur gegen Änderungen geschützt sind (typisch für Vorlesungsskripte), und gedrehte Seiten lassen sich beschriften
 
 **Stift**
 - 4 Stifte und 3 Textmarker mit frei wählbarer Farbe und Stärke
@@ -78,6 +86,12 @@
   <tr>
     <td align="center">Am Tablet: Stift-Menü mit Stärken, Farben und eigener Farbe</td>
     <td align="center">Alle offenen Aufgaben und Tags auf einen Blick</td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/pdf.png" alt="PDF-Abschnitt: links die PDFs eines Nextcloud-Ordners mit Unterordner, rechts ein Vorlesungsskript mit Textmarker, Kreis, Pfeil, Unterstreichung und getippter Notiz"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">Ein Vorlesungsskript direkt aus dem Nextcloud-Ordner beschriftet. PDFs mit Wolke sind noch nicht heruntergeladen</td>
   </tr>
   <tr>
     <td colspan="2"><img src="docs/screenshots/dark.png" alt="Dunkelmodus mit Tags, Aufgabenliste, Tabelle und Stiftanmerkung"></td>
@@ -148,10 +162,11 @@ API-Berechtigungen musst du nicht eintragen: Bei der Anmeldung im Browser fragt 
 | Kopieren & Einfügen | Auswahl → **Kopieren** in der Leiste über der Auswahl. Einfügen am Tablet: lange auf eine freie Stelle drücken → **Einfügen**; am PC Rechtsklick oder Strg+V. Text und Bilder aus anderen Apps funktionieren auch |
 | PDF beschriften | **Einfügen → PDF-Ausdruck** oder PDF auf die Seite ziehen |
 | PDFs aus einem Nextcloud-Ordner | *Abschnitt hinzufügen → PDF-Ordner aus Nextcloud …*, Ordner wählen. **+** in der Seitenleiste lädt eine PDF vom Gerät in den Ordner; Umbenennen und Löschen über das Kontextmenü „…“ |
+| Notizbuch schließen / öffnen | Kontextmenü „…“ des Notizbuchs → *Notizbuch schließen*. Zurück holst du es über das Ordner-Symbol neben „+“ in der Notizbuchleiste (*Notizbuch öffnen*) |
 | Seite/Abschnitt verschieben | Ziehen (am Tablet am Griff ⠿) oder Kontextmenü „…“ → *Verschieben nach …* |
 | Unterseite | Kontextmenü einer Seite → *Tiefer stufen* oder Tab-Taste in der Seitenliste |
 
-**Tastenkürzel (Windows):** Strg+N neue Seite · Strg+Alt+Umschalt+N Unterseite · Strg+T neuer Abschnitt · Strg+E/Strg+F Suche · Strg+S jetzt synchronisieren · Strg+Z/Strg+Y rückgängig/wiederholen · Strg+K Link · Strg+. Aufzählung · Strg+/ Nummerierung · Strg+Alt+1–3 Überschriften · Alt+Umschalt+D/T Datum/Uhrzeit · Entf löscht die Auswahl · F11 Vollbild
+**Tastenkürzel (Windows):** Strg+N neue Seite · Strg+Alt+Umschalt+N Unterseite · Strg+T neuer Abschnitt · Strg+E/Strg+F Suche · Strg+S jetzt synchronisieren (speichert auch eine geöffnete PDF sofort in Nextcloud) · Strg+Z/Strg+Y rückgängig/wiederholen · Strg+K Link · Strg+. Aufzählung · Strg+/ Nummerierung · Strg+Alt+1–3 Überschriften · Alt+Umschalt+D/T Datum/Uhrzeit · Entf löscht die Auswahl · F11 Vollbild
 
 ## So liegen die Daten in Nextcloud
 
@@ -168,9 +183,17 @@ NextNote/
 - Gelöschte Seiten liegen 60 Tage im NextNote-Papierkorb. Endgültig gelöschte Dateien landen zusätzlich im Papierkorb deiner Nextcloud.
 - Einen Notizbuch-Ordner in der Nextcloud-Weboberfläche umzubenennen ist unproblematisch. Ihn zu löschen löscht das Notizbuch auf allen Geräten.
 
+### Und auf dem Gerät
+
+Jedes Gerät hält eine lokale Kopie in der App-Datenbank (Windows: `%APPDATA%\NextNote`, Android: privater App-Speicher). So funktioniert NextNote auch offline.
+
+- **Notizbücher:** vollständig lokal, auch geschlossene. Geschlossene werden nur nicht mehr synchronisiert.
+- **PDFs:** nur die, die du auf diesem Gerät schon einmal geöffnet hast, und nur solange ihr Notizbuch geöffnet ist. Gespeichert werden die PDF ohne NextNote-Anmerkungen und die Anmerkungen getrennt davon; beim Hochladen wird daraus wieder eine PDF. Heruntergeladen wird eine PDF nur, wenn sie sich in Nextcloud geändert hat, nicht bei jedem Öffnen.
+- Wird ein Notizbuch geschlossen, verschwinden die lokalen Kopien seiner PDFs. PDFs mit noch nicht hochgeladenen Anmerkungen bleiben, bis das Notizbuch wieder geöffnet ist.
+
 ## Datenschutz und Sicherheit
 
-- NextNote verbindet sich ausschließlich mit der Nextcloud, die du einträgst. Es gibt keine Telemetrie, keine Werbung und keine Drittanbieter-Dienste. Einzige Ausnahme ist der OneNote-Import, wenn du ihn startest: Dann meldet sich NextNote bei Microsoft an und liest deine Notizbücher. Der Zugriffsschlüssel dafür bleibt nur im Arbeitsspeicher, bis du den Import-Dialog schließt, und wird nur an Microsoft-Adressen geschickt.
+- NextNote verbindet sich ausschließlich mit der Nextcloud, die du einträgst. Dort liest und schreibt es nur im NextNote-Ordner und in den Ordnern, die du als PDF-Ordner auswählst. Es gibt keine Telemetrie, keine Werbung und keine Drittanbieter-Dienste. Einzige Ausnahme ist der OneNote-Import, wenn du ihn startest: Dann meldet sich NextNote bei Microsoft an und liest deine Notizbücher. Der Zugriffsschlüssel dafür bleibt nur im Arbeitsspeicher, bis du den Import-Dialog schließt, und wird nur an Microsoft-Adressen geschickt.
 - Statt deines Nextcloud-Passworts speichert NextNote ein eigenes App-Passwort. Du siehst es in Nextcloud unter *Einstellungen → Sicherheit* und kannst es dort widerrufen. Beim Abmelden in NextNote wird es automatisch widerrufen.
 - Unter **Windows** ist das App-Passwort mit der Windows-Datenschutz-API (DPAPI) verschlüsselt, unter **Android** mit einem Schlüssel aus dem Android-Keystore, der das Gerät nicht verlassen kann.
 - Unter Android schließt NextNote seine Daten von Android-Backups und von der Übertragung auf ein neues Gerät aus. Auf einem neuen Gerät meldest du dich einfach neu an, und deine Notizbücher kommen aus der Nextcloud. Synchronisiere vor einem Gerätewechsel, damit keine Änderung verloren geht.
