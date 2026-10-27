@@ -6,7 +6,9 @@ import { NetworkError } from '../platform/types';
 import { DavError, joinPath, type DavEntry, type WebDavClient } from '../sync/webdav';
 import { readAnnotatedPdf, writeAnnotatedPdf, type ReadResult, type WriteOptions } from './annotate';
 import { relayout, sameLayout } from './layout';
-import { isPdfDirty, isPdfName, uniquePath, type PdfRepo } from './repo';
+import { isPdfDirty, isPdfName, pdfTitle, uniquePath, type PdfRepo } from './repo';
+
+const isWanted = (d: PdfDoc) => d.offline !== false;
 
 /**
  * Keeps the PDF sections in step with their Nextcloud folders: every PDF of the folder (and its
@@ -53,8 +55,10 @@ export class PdfSync {
 
   async sync(): Promise<PdfSyncReport> {
     this.report = { uploaded: 0, downloaded: 0, deleted: 0, conflicts: 0, errors: [], changedDocs: new Set(), structureChanged: false, retryInMs: null };
-    const all = await this.db.sections.toArray();
-    for (const s of all.filter((x) => x.pdfFolder)) {
+    const all = (await this.db.sections.toArray()).filter((x) => x.pdfFolder);
+    // notebooks closed on this device are not synced
+    const closed = new Set((await this.db.notebooks.toArray()).filter((n) => n.closedAt).map((n) => n.id));
+    for (const s of all.filter((x) => !closed.has(x.notebookId))) {
       try {
         await this.syncSection(s);
       } catch (e) {
@@ -62,10 +66,13 @@ export class PdfSync {
         this.report.errors.push(`${s.name}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
-    // copies of PDFs whose section is gone (e.g. its notebook was deleted on another device)
-    const sectionIds = new Set(all.filter((x) => x.pdfFolder).map((x) => x.id));
+    const sections = new Map(all.map((x) => [x.id, x]));
     for (const doc of await this.db.pdfDocs.toArray()) {
-      if (!sectionIds.has(doc.sectionId) && (!isPdfDirty(doc) || doc.etag === null)) await this.repo.purge(doc.id);
+      const section = sections.get(doc.sectionId);
+      // the section is gone (e.g. its notebook was deleted on another device): nothing to upload to
+      if (!section && (!isPdfDirty(doc) || doc.etag === null)) await this.repo.purge(doc.id);
+      // a closed notebook keeps only PDFs with annotations that are not uploaded yet
+      else if (section && closed.has(section.notebookId) && !isPdfDirty(doc)) await this.repo.purge(doc.id);
     }
     return this.report;
   }
@@ -78,7 +85,9 @@ export class PdfSync {
     const { db, client } = this;
     const folder = section.pdfFolder as string;
     const locals = await db.pdfDocs.where('sectionId').equals(section.id).toArray();
-    const missingFiles = locals.length - (await db.pdfFiles.where('id').anyOf(locals.map((d) => d.id)).count());
+    // PDFs are only on the device once they were opened here
+    const wanted = locals.filter(isWanted);
+    const missingFiles = wanted.length - (await db.pdfFiles.where('id').anyOf(wanted.map((d) => d.id)).count());
     const pending = locals.some((d) => isPdfDirty(d) || d.deletedAt !== null) || missingFiles > 0;
     // trashed sections: only bring what was written here to the server
     if (section.deletedAt !== null && !pending) return;
@@ -106,9 +115,7 @@ export class PdfSync {
       if (local && matched.has(local.id)) local = undefined;
       try {
         if (!local) {
-          if (section.deletedAt !== null) continue;
-          this.progress(`„${section.name}“: PDF ${i} von ${remote.size} wird geladen …`);
-          await this.downloadNew(section, path, entry);
+          if (section.deletedAt === null) await this.registerNew(section, path, entry);
           continue;
         }
         matched.add(local.id);
@@ -125,9 +132,17 @@ export class PdfSync {
           local = { ...local, path, fileId: entry.fileId ?? local.fileId };
           this.report.structureChanged = true;
         }
+        if (!isWanted(local)) {
+          // only in Nextcloud: keep the list entry current
+          if (local.etag !== entry.etag || local.size !== entry.size || local.lastModified !== entry.lastModified) {
+            await db.pdfDocs.update(local.id, { etag: entry.etag, size: entry.size, lastModified: entry.lastModified || local.lastModified });
+            this.report.structureChanged = true;
+          }
+          continue;
+        }
         const hasFile = (await db.pdfFiles.where('id').equals(local.id).count()) > 0;
         if (!hasFile || !entry.etag || entry.etag !== local.etag) {
-          this.progress(`„${section.name}“: PDF ${i} von ${remote.size} wird geladen …`);
+          this.progress(`„${pdfTitle(path)}“ wird geladen …`);
           const file = await client.get(joinPath(folder, path));
           if (!file) continue;
           local = await this.applyRemote(local, file.data, file.etag ?? entry.etag, entry);
@@ -198,17 +213,15 @@ export class PdfSync {
     }
   }
 
-  private async downloadNew(section: Section, path: string, entry: DavEntry) {
-    const file = await this.client.get(joinPath(section.pdfFolder as string, path));
-    if (!file) return;
-    const { read, readOnly } = await this.read(file.data);
+  /** A PDF that appeared in the folder: listed, but loaded only when it is opened. */
+  private async registerNew(section: Section, path: string, entry: DavEntry) {
     const doc: PdfDoc = {
       id: newId(),
       sectionId: section.id,
       path,
       fileId: entry.fileId ?? null,
-      etag: file.etag ?? entry.etag,
-      size: file.data.byteLength,
+      etag: entry.etag,
+      size: entry.size,
       lastModified: entry.lastModified || Date.now(),
       pages: null,
       rev: 1,
@@ -218,10 +231,9 @@ export class PdfSync {
       readOnly: null,
       dataVersion: 0,
       baseId: null,
+      offline: false,
     };
-    const body: PageBody = { id: doc.id, elements: Object.fromEntries((read?.elements ?? []).map((e) => [e.id, e])), tombstones: read?.tombstones ?? {} };
-    await this.repo.storeFile({ ...doc, base: elementTimes(body) }, file.data, read, readOnly, body);
-    this.report.downloaded++;
+    await this.db.pdfDocs.put(doc);
     this.report.structureChanged = true;
   }
 

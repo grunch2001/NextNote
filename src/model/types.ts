@@ -26,6 +26,8 @@ export interface Notebook extends SyncFields {
   folder: string | null;
   /** ETag of the notebook folder as seen in the root listing at the last clean sync. */
   folderEtag: string | null;
+  /** Closed on this device: hidden and not synced, its PDFs are not kept. Local only, never uploaded. */
+  closedAt?: number | null;
 }
 
 export interface Section extends SyncFields {
@@ -74,6 +76,8 @@ export interface PdfDoc {
   dataVersion: number;
   /** Identifies the stored file without annotations (see ReadResult.baseId). */
   baseId: string | null;
+  /** Keep the file on this device (false: only in Nextcloud, loaded when opened). Missing means true. */
+  offline?: boolean;
 }
 
 export type RuleStyle = 'none' | 'lines' | 'lines-wide' | 'grid' | 'dots';

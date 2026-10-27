@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ChevronDown, ChevronRight, CloudUpload, FilePlus2, Folder, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Cloud, CloudUpload, FilePlus2, Folder, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { db } from '../db/db';
 import { pdfRepo } from '../state/repo';
 import type { ID, PdfDoc, Section } from '../model/types';
@@ -51,6 +51,11 @@ function shortDate(ts: number) {
 
 const indent = (depth: number) => ({ paddingLeft: 10 + depth * 16 });
 
+function fileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB`;
+}
+
 function DocRow({ doc, depth, active }: { doc: PdfDoc; depth: number; active: boolean }) {
   const items = (): MenuItem[] => [
     { label: 'Umbenennen', icon: <Pencil size={15} />, run: () => void renamePdf(doc.id) },
@@ -58,6 +63,7 @@ function DocRow({ doc, depth, active }: { doc: PdfDoc; depth: number; active: bo
     { label: 'Löschen', icon: <Trash2 size={15} />, danger: true, run: () => void deletePdf(doc.id) },
   ];
   const unsaved = isPdfDirty(doc) && !doc.readOnly;
+  const cloudOnly = !doc.pages;
   return (
     <div
       className={`page-row pdf-row${active ? ' active' : ''}`}
@@ -81,9 +87,14 @@ function DocRow({ doc, depth, active }: { doc: PdfDoc; depth: number; active: bo
         <span className="page-row-title">{pdfTitle(doc.path)}</span>
         <span className="page-row-date">
           {shortDate(doc.lastModified)}
-          {doc.pages ? ` · ${doc.pages.length} ${doc.pages.length === 1 ? 'Seite' : 'Seiten'}` : ''}
+          {doc.pages ? ` · ${doc.pages.length} ${doc.pages.length === 1 ? 'Seite' : 'Seiten'}` : ` · ${fileSize(doc.size)}`}
         </span>
       </div>
+      {cloudOnly && (
+        <span className="pdf-row-state cloud" title="Nur in Nextcloud – wird beim Öffnen geladen" aria-label="Nur in Nextcloud">
+          <Cloud size={14} />
+        </span>
+      )}
       {unsaved && (
         <span className="pdf-row-state" title="Noch nicht in Nextcloud gespeichert" aria-label="Noch nicht in Nextcloud gespeichert">
           <CloudUpload size={14} />

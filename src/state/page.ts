@@ -193,7 +193,11 @@ export const pageActions = {
     usePage.setState({ loading: true });
     const page = await loadDoc(pageId);
     if (seq !== loadSeq) return;
-    if (page?.kind === 'pdf') pdfRepo.openId = pageId;
+    if (page?.kind === 'pdf') {
+      pdfRepo.openId = pageId;
+      // only in Nextcloud so far: load it
+      void pdfRepo.want(pageId);
+    }
     if (prevPdf && prevPdf !== pageId) closedPdf(prevPdf);
     usePage.setState({
       pageId,

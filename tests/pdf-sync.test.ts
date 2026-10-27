@@ -39,6 +39,14 @@ async function annotate(dev: ReturnType<typeof pdfDevice>, docId: string, ...els
   await dev.pdfRepo.saveBody(docId, { ...body, elements: { ...body.elements, ...Object.fromEntries(els.map((e) => [e.id, e])) } });
 }
 
+/** Syncs, opens every PDF of the section once (so they are loaded) and syncs again. */
+async function openAll(dev: ReturnType<typeof pdfDevice>, sectionId: string) {
+  await dev.syncAll();
+  for (const d of await dev.pdfRepo.listDocs(sectionId)) await dev.pdfRepo.want(d.id);
+  await dev.syncAll();
+  return dev.pdfRepo.listDocs(sectionId);
+}
+
 async function serverIds(server: ReturnType<typeof createServer>, path: string) {
   const bytes = server.readBytes(path);
   if (!bytes) return null;
@@ -57,22 +65,30 @@ async function setup() {
 }
 
 describe('PDF folders', () => {
-  it('keeps all PDFs of the folder and its sub folders on the device', async () => {
+  it('lists the PDFs of the folder and its sub folders, and loads a PDF when it is opened', async () => {
     const { a, section } = await setup();
     expect(await a.repo.listPages(section.id)).toEqual([]);
     const r = await a.syncAll();
-    expect(r.downloaded).toBe(2);
+    expect(r.downloaded).toBe(0);
     const docs = await a.pdfRepo.listDocs(section.id);
     expect(docs.map((d) => d.path)).toEqual(['Skript.pdf', 'Übungen/Blatt 1.pdf']);
-    expect(docs[0].pages).toHaveLength(2);
-    expect(docs.every((d) => d.etag && d.fileId)).toBe(true);
-    expect(await a.db.pdfFiles.count()).toBe(2);
+    expect(docs.every((d) => d.etag && d.fileId && d.size > 0 && d.offline === false && d.pages === null)).toBe(true);
+    expect(await a.db.pdfFiles.count()).toBe(0);
+
+    await a.pdfRepo.want(docs[0].id);
+    const r2 = await a.syncAll();
+    expect(r2.downloaded).toBe(1);
+    const skript = await a.pdfRepo.getDoc(docs[0].id);
+    expect(skript?.pages).toHaveLength(2);
+    expect(await a.db.pdfFiles.count()).toBe(1);
+    // it stays on the device and the other one stays in the cloud
+    await a.syncAll();
+    expect(await a.db.pdfFiles.count()).toBe(1);
   });
 
   it('saves annotations into the PDF and brings them to the other device', async () => {
     const { server, a, section } = await setup();
-    await a.syncAll();
-    const doc = (await a.pdfRepo.listDocs(section.id))[0];
+    const [doc] = await openAll(a, section.id);
     const slots = pdfLayout(doc.pages!).slots;
     const s1 = stroke(slots[0].y);
     const s2 = stroke(slots[1].y);
@@ -84,19 +100,16 @@ describe('PDF folders', () => {
     expect(server.listFiles().filter((f) => f.startsWith('NextNote/') && !f.endsWith('.json'))).toEqual([]);
 
     const b = pdfDevice(server, 'b');
-    await b.syncAll();
-    const docB = (await b.pdfRepo.listDocs(section.id)).find((d) => d.path === 'Skript.pdf')!;
+    const docB = (await openAll(b, section.id)).find((d) => d.path === 'Skript.pdf')!;
     expect(Object.keys((await b.pdfRepo.getBody(docB.id)).elements).sort()).toEqual([s1.id, s2.id].sort());
     expect((await b.pdfRepo.getBody(docB.id)).elements[s1.id]).toEqual(s1);
   });
 
   it('merges annotations made on two devices at the same time', async () => {
     const { server, a, section } = await setup();
-    await a.syncAll();
+    const [docA] = await openAll(a, section.id);
     const b = pdfDevice(server, 'b');
-    await b.syncAll();
-    const docA = (await a.pdfRepo.listDocs(section.id))[0];
-    const docB = (await b.pdfRepo.listDocs(section.id))[0];
+    const [docB] = await openAll(b, section.id);
     const y = pdfLayout(docA.pages!).slots[0].y;
     const fromA = stroke(y, 100);
     const fromB = stroke(y, 300);
@@ -121,8 +134,7 @@ describe('PDF folders', () => {
 
   it('keeps the annotations when the file is renamed in Nextcloud', async () => {
     const { server, a, section } = await setup();
-    await a.syncAll();
-    const doc = (await a.pdfRepo.listDocs(section.id))[0];
+    const [doc] = await openAll(a, section.id);
     const s = stroke(pdfLayout(doc.pages!).slots[0].y);
     await annotate(a, doc.id, s);
     await a.syncAll();
@@ -152,8 +164,7 @@ describe('PDF folders', () => {
 
   it('forgets PDFs deleted in Nextcloud, but keeps unsaved annotations by uploading again', async () => {
     const { server, a, section } = await setup();
-    await a.syncAll();
-    const [skript, blatt] = await a.pdfRepo.listDocs(section.id);
+    const [skript, blatt] = await openAll(a, section.id);
     await annotate(a, blatt.id, stroke(pdfLayout(blatt.pages!).slots[0].y));
     server.files.get('alice')!.delete('Uni/Mathe/Skript.pdf');
     server.files.get('alice')!.delete('Uni/Mathe/Übungen/Blatt 1.pdf');
@@ -165,8 +176,7 @@ describe('PDF folders', () => {
 
   it('waits with the upload while a PDF is being edited', async () => {
     const { server, a, section } = await setup();
-    await a.syncAll();
-    const doc = (await a.pdfRepo.listDocs(section.id))[0];
+    const [doc] = await openAll(a, section.id);
     a.pdfRepo.openId = doc.id;
     const s = stroke(pdfLayout(doc.pages!).slots[0].y);
     await annotate(a, doc.id, s);
@@ -180,14 +190,40 @@ describe('PDF folders', () => {
   });
 
   it('removes the local copies when the notebook is deleted, but leaves the PDFs in Nextcloud', async () => {
-    const { server, a, nb } = await setup();
-    await a.syncAll();
-    expect(await a.db.pdfDocs.count()).toBe(2);
+    const { server, a, nb, section } = await setup();
+    await openAll(a, section.id);
+    expect(await a.db.pdfFiles.count()).toBe(2);
     await a.repo.deleteNotebook(nb.id);
     await a.syncAll();
     expect(await a.db.pdfDocs.count()).toBe(0);
     expect(await a.db.pdfFiles.count()).toBe(0);
     expect(server.listFiles().filter((f) => f.endsWith('.pdf'))).toEqual(['Uni/Mathe/Skript.pdf', 'Uni/Mathe/Übungen/Blatt 1.pdf']);
+  });
+
+  it('drops the PDFs of a closed notebook and loads them again only when opened after reopening', async () => {
+    const { server, a, nb, section } = await setup();
+    const [skript, blatt] = await openAll(a, section.id);
+    // annotations that could not be uploaded yet are kept while the notebook is closed
+    await annotate(a, blatt.id, stroke(pdfLayout(blatt.pages!).slots[0].y));
+    const { keptPdfs } = await a.repo.closeNotebook(nb.id);
+    expect(keptPdfs).toBe(1);
+    expect(await a.pdfRepo.getDoc(skript.id)).toBeUndefined();
+    expect(await a.db.pdfFiles.count()).toBe(1);
+    expect(await a.repo.listNotebooks()).toEqual([]);
+
+    // a closed notebook is not synced at all
+    server.writeFile('Uni/Mathe/Neu.pdf', await makePdf('Neu', 1));
+    server.requestLog = [];
+    await a.syncAll();
+    expect(server.requestLog.filter((r) => r.path.includes('/Uni/'))).toEqual([]);
+    expect(await serverIds(server, 'Uni/Mathe/Übungen/Blatt 1.pdf')).toEqual([]);
+
+    await a.repo.reopenNotebook(nb.id);
+    await a.syncAll();
+    expect((await a.pdfRepo.listDocs(section.id)).map((d) => d.path)).toEqual(['Neu.pdf', 'Skript.pdf', 'Übungen/Blatt 1.pdf']);
+    // only the kept PDF is on the device (and its annotations are uploaded now)
+    expect(await a.db.pdfFiles.count()).toBe(1);
+    expect(await serverIds(server, 'Uni/Mathe/Übungen/Blatt 1.pdf')).toHaveLength(1);
   });
 
   it('only checks the folder when nothing changed', async () => {

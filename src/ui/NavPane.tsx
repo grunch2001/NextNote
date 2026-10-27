@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BookOpen, ChevronDown, ChevronRight, FileStack, FileText, FolderInput, GripVertical, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { BookOpen, BookX, ChevronDown, ChevronRight, FileStack, FileText, FolderInput, FolderOpen, GripVertical, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { db } from '../db/db';
 import { repo } from '../state/repo';
 import type { ID, Notebook, Section } from '../model/types';
@@ -8,7 +8,20 @@ import { useUI } from '../state/ui';
 import { syncManager } from '../sync/manager';
 import { isTouchDevice } from '../platform';
 import { openMenu, openMenuAt, type MenuItem } from './Dialogs';
-import { deleteNotebook, deleteSection, moveNotebookBefore, movePagesTo, moveSectionTo, newNotebook, newPdfSection, newSection, renameNotebook, renameSection } from './actions';
+import {
+  closeNotebook,
+  deleteNotebook,
+  deleteSection,
+  moveNotebookBefore,
+  movePagesTo,
+  moveSectionTo,
+  newNotebook,
+  newPdfSection,
+  newSection,
+  renameNotebook,
+  renameSection,
+  reopenNotebook,
+} from './actions';
 import { beginDrag, dropClass, useDnd, type DragPayload, type DropTarget } from './dnd';
 import { openMoveDialog } from './MoveDialog';
 import { PaneFoot } from './PaneToggles';
@@ -110,6 +123,7 @@ function NotebookBlock({ nb }: { nb: Notebook }) {
     { label: `Papierkorb${trashCount ? ` (${trashCount})` : ''}`, icon: <Trash2 size={15} />, run: () => useUI.setState({ recycleBinFor: nb.id }) },
     { label: 'Farbe', swatches: { colors: NOTEBOOK_COLORS, current: nb.color, apply: (c) => void repo.updateNotebook(nb.id, { color: c }) } },
     { separator: true, label: '' },
+    { label: 'Notizbuch schließen', icon: <BookX size={15} />, run: () => void closeNotebook(nb.id) },
     { label: 'Notizbuch löschen', icon: <Trash2 size={15} />, danger: true, run: () => void deleteNotebook(nb.id) },
   ];
   return (
@@ -181,20 +195,48 @@ function NotebookBlock({ nb }: { nb: Notebook }) {
   );
 }
 
+/** Menu with the notebooks closed on this device. */
+function openClosedMenu(anchor: Element, closed: Notebook[]) {
+  openMenuAt(
+    anchor,
+    closed.length
+      ? closed.map((nb) => ({ label: nb.name, icon: <BookOpen size={15} style={{ color: nb.color }} />, run: () => void reopenNotebook(nb.id) }))
+      : [{ label: 'Keine geschlossenen Notizbücher', disabled: true }],
+  );
+}
+
 export function NavPane() {
   const notebooks = useLiveQuery(() => repo.listNotebooks(), []) ?? [];
+  const closed = useLiveQuery(() => repo.listClosedNotebooks(), []) ?? [];
   return (
     <nav className="nav-pane" aria-label="Notizbücher">
       <div className="pane-head">
         <span>Notizbücher</span>
-        <button type="button" className="icon-btn small" onClick={() => void newNotebook()} title="Neues Notizbuch" aria-label="Neues Notizbuch">
-          <Plus size={16} />
-        </button>
+        <span className="pane-head-actions">
+          <button
+            type="button"
+            className="icon-btn small"
+            onClick={(e) => openClosedMenu(e.currentTarget, closed)}
+            title="Notizbuch öffnen"
+            aria-label="Notizbuch öffnen"
+          >
+            <FolderOpen size={16} />
+          </button>
+          <button type="button" className="icon-btn small" onClick={() => void newNotebook()} title="Neues Notizbuch" aria-label="Neues Notizbuch">
+            <Plus size={16} />
+          </button>
+        </span>
       </div>
       <div className="pane-scroll" role="tree">
         {notebooks.map((nb) => (
           <NotebookBlock key={nb.id} nb={nb} />
         ))}
+        {notebooks.length === 0 && closed.length > 0 && <div className="pdf-empty">Alle Notizbücher sind auf diesem Gerät geschlossen.</div>}
+        {notebooks.length === 0 && closed.length > 0 && (
+          <button type="button" className="nav-add" onClick={(e) => openClosedMenu(e.currentTarget, closed)}>
+            <FolderOpen size={14} /> Notizbuch öffnen
+          </button>
+        )}
         {notebooks.length === 0 && (
           <button type="button" className="nav-add" onClick={() => void newNotebook()}>
             <Plus size={14} /> Notizbuch erstellen

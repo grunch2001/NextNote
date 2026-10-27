@@ -33,6 +33,7 @@
 **Organisation**
 - Notizbücher → farbige Abschnitte → Seiten mit bis zu zwei Ebenen Unterseiten
 - Verschieben per Drag & Drop oder Kontextmenü, auch zwischen Notizbüchern
+- Notizbücher lassen sich pro Gerät **schließen**: Sie verschwinden aus der Leiste, werden nicht mehr synchronisiert und ihre PDFs nicht mehr auf dem Gerät gehalten; Seiten bleiben lokal gespeichert. Über **Notizbuch öffnen** (Ordner-Symbol neben „+“) kommen sie zurück und werden dabei auf den neuesten Stand gebracht
 - Suche über alle Notizbücher mit Hervorhebung auf der Seite
 - Übersicht aller Tags und offenen Aufgaben über alle Notizbücher hinweg
 - Papierkorb (60 Tage), Rückgängig/Wiederholen
@@ -52,7 +53,7 @@
 - Ein Abschnitt kann ein **Ordner deiner Nextcloud** sein (*Abschnitt hinzufügen → PDF-Ordner aus Nextcloud …*). Statt Seiten zeigt er die PDFs dieses Ordners, Unterordner aufklappbar wie Unterseiten
 - Eine PDF öffnet sich mit ihren Seiten untereinander; Stift, Textmarker, Radierer, Lasso, Formen, Text und Bilder funktionieren wie auf jeder Seite
 - Gespeichert wird **in die PDF selbst**, im gewählten Ordner, nicht im NextNote-Ordner. Die Anmerkungen sind normale PDF-Anmerkungen: Nextcloud, Acrobat, Samsung Notes und andere PDF-Programme zeigen sie an, der Inhalt der PDF bleibt unverändert
-- Alle PDFs des Ordners liegen auch offline auf dem Gerät. Hochgeladen wird, wenn du die PDF schließt, nach 30 Sekunden ohne Eingabe, wenn die App in den Hintergrund geht oder mit Strg+S
+- Eine PDF wird erst beim ersten Öffnen heruntergeladen (in der Liste erkennbar am Wolken-Symbol) und bleibt dann auf dem Gerät, solange das Notizbuch geöffnet ist. Hochgeladen wird, wenn du die PDF schließt, nach 30 Sekunden ohne Eingabe, wenn die App in den Hintergrund geht oder mit Strg+S
 - Haben zwei Geräte dieselbe PDF gleichzeitig beschriftet, werden die Anmerkungen zusammengeführt
 
 **Stift**

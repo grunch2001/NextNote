@@ -201,7 +201,7 @@ export async function importFromOneNote(opts: ImportOptions): Promise<ImportSumm
     }
     const total = plan.reduce((n, p) => n + p.sections.reduce((m, s) => m + s.pages.length, 0), 0);
     let done = 0;
-    const names = new Set((await repo.listNotebooks()).map((n) => n.name));
+    const names = new Set((await repo.listNotebooks(true)).map((n) => n.name));
     for (const { nb, sections } of plan) {
       check();
       let name = nb.displayName.trim() || 'OneNote';

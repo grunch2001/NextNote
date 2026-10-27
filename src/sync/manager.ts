@@ -73,6 +73,7 @@ class SyncManager {
     repo.onChange = () => this.requestSync(4000);
     // a PDF is uploaded as a whole: only once the pen rested for a while (or the PDF was closed)
     pdfRepo.onChange = (id) => this.schedulePdfUpload(pdfRepo.uploadDelay(id) + 1500);
+    pdfRepo.onWanted = () => void this.syncNow();
     platform.onResume(() => this.requestSync(300));
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') void this.uploadPdfsNow();
@@ -176,6 +177,12 @@ class SyncManager {
 
   private async waitIdle() {
     while (this.running) await this.running;
+  }
+
+  /** Waits for a sync that is already running, then syncs once more (everything up to now is included). */
+  async syncFresh(opts: { force?: boolean } = {}) {
+    await this.waitIdle();
+    await this.syncNow(opts);
   }
 
   /** Schedule a sync. Repeated calls within the delay are coalesced. */

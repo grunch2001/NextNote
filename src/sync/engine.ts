@@ -138,7 +138,8 @@ export class SyncEngine {
     for (const f of folders) {
       const mapped = byFolder.get(f.name);
       if (mapped && !seen.has(mapped.id)) {
-        plan.push({ nb: mapped, entry: f });
+        // closed on this device: left alone until it is opened again
+        if (!mapped.closedAt) plan.push({ nb: mapped, entry: f });
         seen.add(mapped.id);
         continue;
       }
@@ -158,6 +159,11 @@ export class SyncEngine {
       }
       if (seen.has(remote.id)) continue; // a copied folder with the same id
       const existing = locals.find((n) => n.id === remote.id);
+      if (existing?.closedAt) {
+        // renamed on another device while closed here: handled when it is opened again
+        seen.add(existing.id);
+        continue;
+      }
       if (existing) {
         // renamed/moved on another device
         existing.folder = f.name;
@@ -187,7 +193,7 @@ export class SyncEngine {
     await db.setKV('ignoredFolders', ignored);
 
     for (const nb of locals) {
-      if (seen.has(nb.id)) continue;
+      if (seen.has(nb.id) || nb.closedAt) continue;
       if (nb.folder === null) {
         plan.push({ nb, entry: null });
         continue;

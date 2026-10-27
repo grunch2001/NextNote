@@ -50,7 +50,7 @@ export async function newPdfSection(notebookId?: ID | null) {
   const name = folder.split('/').at(-1) || 'PDFs';
   const section = await repo.createSection(nb, name, { pdfFolder: folder });
   useUI.getState().openSection(section.id, nb);
-  toast(`Die PDFs aus „${folder}“ werden geladen …`);
+  toast(`Der Ordner „${folder}“ wird eingelesen. Eine PDF wird erst geladen, wenn du sie öffnest.`);
   void syncManager.syncNow();
 }
 
@@ -140,6 +140,41 @@ export async function newPage(opts: { subpage?: boolean; sectionId?: ID } = {}) 
   }
   focusTitleOnNextPage = true;
   ui.openPage(page.id, sectionId);
+}
+
+/** Hides a notebook on this device; it is no longer synced and its PDFs are not kept here. */
+export async function closeNotebook(id: ID) {
+  const nb = await db.notebooks.get(id);
+  if (!nb) return;
+  const ui = useUI.getState();
+  if (ui.notebookId === id) {
+    const other = (await repo.listNotebooks()).find((n) => n.id !== id);
+    ui.openPage(null, null, other?.id ?? null);
+  }
+  // bring the last changes to Nextcloud first
+  if (syncManager.configured) await syncManager.syncFresh({ force: true });
+  const { keptPdfs } = await repo.closeNotebook(id);
+  const pending = syncManager.configured && ((await db.kv.get(`dirty:${id}`)) !== undefined || keptPdfs > 0);
+  toast(
+    pending
+      ? `„${nb.name}“ geschlossen. Noch nicht synchronisierte Änderungen werden hochgeladen, sobald du es wieder öffnest.`
+      : `„${nb.name}“ geschlossen. Du findest es unter „Notizbuch öffnen“.`,
+    'info',
+    { label: 'Rückgängig', run: () => void reopenNotebook(id) },
+  );
+}
+
+/** Shows a closed notebook again and brings it up to date. */
+export async function reopenNotebook(id: ID) {
+  const nb = await db.notebooks.get(id);
+  if (!nb) return;
+  await repo.reopenNotebook(id);
+  useUI.setState((s) => ({ expanded: { ...s.expanded, [id]: true } }));
+  useUI.getState().openPage(null, null, id);
+  if (syncManager.configured) {
+    toast(`„${nb.name}“ wird mit Nextcloud abgeglichen …`);
+    void syncManager.syncNow();
+  }
 }
 
 export async function renameNotebook(id: ID) {

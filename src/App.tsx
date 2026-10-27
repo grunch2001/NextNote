@@ -33,7 +33,8 @@ import { newPage, newSection } from './ui/actions';
 function useValidSelection() {
   const state = useLiveQuery(async () => {
     const notebooks = await repo.listNotebooks();
-    return { notebooks };
+    const closed = (await repo.listClosedNotebooks()).length;
+    return { notebooks, closed };
   }, []);
   const notebookId = useUI((s) => s.notebookId);
   const sectionId = useUI((s) => s.sectionId);
@@ -45,7 +46,9 @@ function useValidSelection() {
     let cancelled = false;
     void (async () => {
       const ui = useUI.getState();
-      const nbs = state.notebooks;
+      // read again: a notebook that was just opened may not be in the live query yet
+      const nbs = await repo.listNotebooks();
+      if (cancelled) return;
       if (nbs.length === 0) {
         if (ui.notebookId || ui.pageId) ui.openPage(null, null, null);
         return;
@@ -57,7 +60,10 @@ function useValidSelection() {
         if (!cancelled && (ui.notebookId !== nb.id || ui.sectionId || ui.pageId)) ui.openPage(null, null, nb.id);
         return;
       }
-      const pages = sec.pdfFolder ? await pdfRepo.listDocs(sec.id) : await repo.listPages(sec.id);
+      // in a PDF section only PDFs that are on the device are opened by themselves (opening one loads it)
+      const pages = sec.pdfFolder
+        ? (await pdfRepo.listDocs(sec.id)).filter((d) => d.offline !== false || d.id === ui.pageId)
+        : await repo.listPages(sec.id);
       const page = pages.find((p) => p.id === ui.pageId) ?? pages.find((p) => p.id === ui.lastPageBySection[sec.id]) ?? pages[0] ?? null;
       if (cancelled) return;
       if (ui.notebookId !== nb.id || ui.sectionId !== sec.id || ui.pageId !== (page?.id ?? null)) {
@@ -184,7 +190,8 @@ export function App() {
     document.documentElement.style.setProperty('--default-size', `${defaultSize}pt`);
   }, [defaultFont, defaultSize]);
 
-  const hasNotebooks = !!state && state.notebooks.length > 0;
+  // closed notebooks still count: the notebook pane offers to open them
+  const hasNotebooks = !!state && (state.notebooks.length > 0 || state.closed > 0);
   const loaded = !!state;
 
   return (

@@ -796,6 +796,12 @@ button:disabled {
   flex-shrink: 0;
 }
 
+.pane-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .pane-title {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2178,6 +2184,10 @@ button:disabled {
   display: inline-flex;
   flex-shrink: 0;
   color: var(--accent-text);
+}
+
+.pdf-row-state.cloud {
+  color: var(--text-3);
 }
 
 .pdf-empty {

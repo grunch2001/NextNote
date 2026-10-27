@@ -54,6 +54,8 @@ export const isPdfDirty = (d: PdfDoc) => d.rev > d.syncedRev || d.etag === null;
 export class PdfRepo {
   /** Called after the annotations of a PDF changed locally (used to schedule an upload). */
   onChange: ((docId: ID) => void) | null = null;
+  /** Called when a PDF that is only in Nextcloud was opened and has to be loaded. */
+  onWanted: ((docId: ID) => void) | null = null;
   /** The PDF open in the editor. */
   openId: ID | null = null;
   private lastEdit = new Map<ID, number>();
@@ -74,6 +76,14 @@ export class PdfRepo {
 
   getDoc(id: ID) {
     return this.db.pdfDocs.get(id);
+  }
+
+  /** The PDF was opened: from now on it is kept on this device (it is loaded with the next sync). */
+  async want(id: ID): Promise<void> {
+    const doc = await this.db.pdfDocs.get(id);
+    if (!doc || doc.offline !== false) return;
+    await this.db.pdfDocs.update(id, { offline: true });
+    this.onWanted?.(id);
   }
 
   async getBody(id: ID): Promise<PageBody> {
@@ -149,6 +159,7 @@ export class PdfRepo {
       readOnly: null,
       dataVersion: 0,
       baseId: null,
+      offline: true,
     };
     const body: PageBody = { id: doc.id, elements: Object.fromEntries((read?.elements ?? []).map((e) => [e.id, e])), tombstones: read?.tombstones ?? {} };
     const stored = await this.storeFile(doc, bytes, read, readOnly, body);

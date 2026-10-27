@@ -69,9 +69,45 @@ export class Repo {
 
   // ---------------------------------------------------------------- notebooks
 
-  async listNotebooks(): Promise<Notebook[]> {
+  /** The open notebooks (`includeClosed`: also the ones closed on this device). */
+  async listNotebooks(includeClosed = false): Promise<Notebook[]> {
     const all = await this.db.notebooks.toArray();
-    return all.sort((a, b) => a.order - b.order || a.createdAt - b.createdAt);
+    return all.filter((n) => includeClosed || !n.closedAt).sort((a, b) => a.order - b.order || a.createdAt - b.createdAt);
+  }
+
+  async listClosedNotebooks(): Promise<Notebook[]> {
+    return (await this.db.notebooks.toArray()).filter((n) => !!n.closedAt).sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  }
+
+  /**
+   * Closes a notebook on this device: it is hidden and no longer synced, but stays stored here.
+   * The local copies of its PDFs are removed, except those with annotations not uploaded yet.
+   */
+  async closeNotebook(id: ID): Promise<{ keptPdfs: number }> {
+    const db = this.db;
+    let keptPdfs = 0;
+    await db.transaction('rw', [db.notebooks, db.sections, db.pdfDocs, db.pdfBodies, db.pdfFiles, db.assets, db.kv], async () => {
+      const nb = await db.notebooks.get(id);
+      if (!nb) return;
+      await db.notebooks.put({ ...nb, closedAt: now() });
+      const sectionIds = await db.sections.where('notebookId').equals(id).primaryKeys();
+      for (const doc of await db.pdfDocs.where('sectionId').anyOf(sectionIds).toArray()) {
+        if (doc.rev > doc.syncedRev || doc.etag === null) keptPdfs++;
+        else await purgePdfDocInTx(db, doc.id);
+      }
+      for (const sid of sectionIds) await db.kv.delete(`pdfRoot:${sid}`);
+    });
+    return { keptPdfs };
+  }
+
+  /** Shows a closed notebook again; the next sync brings it up to date. */
+  async reopenNotebook(id: ID): Promise<void> {
+    await this.db.transaction('rw', this.db.notebooks, this.db.kv, async () => {
+      const nb = await this.db.notebooks.get(id);
+      if (!nb) return;
+      await this.db.notebooks.put({ ...nb, closedAt: null, folderEtag: null });
+      await this.markDirty(id);
+    });
   }
 
   async createNotebook(name: string, color?: string): Promise<{ notebook: Notebook; section: Section; page: PageMeta }> {
@@ -84,7 +120,7 @@ export class Repo {
   /** A notebook without sections (e.g. as the target of an import). */
   async addNotebook(name: string, color?: string): Promise<Notebook> {
     const ts = now();
-    const existing = await this.listNotebooks();
+    const existing = await this.listNotebooks(true);
     const notebook: Notebook = {
       id: newId(),
       name: name.trim() || 'Neues Notizbuch',

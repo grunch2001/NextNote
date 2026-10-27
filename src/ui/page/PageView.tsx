@@ -96,6 +96,23 @@ function PageHeader({ meta }: { meta: PageMeta }) {
   );
 }
 
+/** Shown while a PDF that was only in Nextcloud is being loaded. */
+function PdfLoading({ doc }: { doc: PdfDoc }) {
+  const status = useSync((s) => s.status);
+  const progress = useSync((s) => s.progress);
+  const connected = useSync((s) => !!s.account);
+  let text = 'Die PDF wird aus Nextcloud geladen …';
+  if (doc.readOnly) text = doc.readOnly;
+  else if (!connected) text = 'Diese PDF ist noch nicht auf diesem Gerät. Verbinde NextNote mit Nextcloud, um sie zu laden.';
+  else if (status === 'offline') text = 'Keine Verbindung zu Nextcloud. Die PDF wird geladen, sobald wieder eine Verbindung besteht.';
+  else if (status === 'syncing' && progress) text = progress;
+  return (
+    <div className="page-view empty">
+      <div className="page-empty-hint">{text}</div>
+    </div>
+  );
+}
+
 /** Save state of an open PDF; tapping it uploads right away. */
 function PdfStatus({ doc }: { doc: PdfDoc }) {
   const status = useSync((s) => s.status);
@@ -118,6 +135,8 @@ function PdfStatus({ doc }: { doc: PdfDoc }) {
 
 export function PageView() {
   const pageId = useUI((s) => s.pageId);
+  const sectionId = useUI((s) => s.sectionId);
+  const inPdfSection = useLiveQuery(async () => !!(sectionId && (await db.sections.get(sectionId))?.pdfFolder), [sectionId]);
   const zoom = useUI((s) => s.zoom);
   // a page, or a PDF of a PDF section (undefined while loading, null if it does not exist)
   const opened = useLiveQuery(async () => {
@@ -525,7 +544,9 @@ export function PageView() {
   if (!pageId) {
     return (
       <div className="page-view empty">
-        <div className="page-empty-hint">Wähle links eine Seite aus oder lege eine neue an.</div>
+        <div className="page-empty-hint">
+          {inPdfSection ? 'Wähle links eine PDF aus. Beim ersten Öffnen wird sie aus Nextcloud geladen.' : 'Wähle links eine Seite aus oder lege eine neue an.'}
+        </div>
       </div>
     );
   }
@@ -537,13 +558,7 @@ export function PageView() {
       </div>
     );
   }
-  if (pdf && !layout) {
-    return (
-      <div className="page-view empty">
-        <div className="page-empty-hint">{pdf.readOnly ?? 'Die PDF wird aus Nextcloud geladen …'}</div>
-      </div>
-    );
-  }
+  if (pdf && !layout) return <PdfLoading doc={pdf} />;
 
   const ready = loadedId === pageId;
   const images = list.filter((e): e is ImageElement => e.type === 'image').sort((a, b) => a.z - b.z);

@@ -265,4 +265,31 @@ describe('local saves during sync', () => {
     await a.repo.savePageBody(page.id, { id: page.id, elements: {}, tombstones: { [t1.id]: now() } });
     expect(Object.keys((await a.repo.getPage(page.id))!.body.elements)).toEqual([]);
   });
+
+  it('does not sync a notebook closed on this device, and catches up when it is opened again', async () => {
+    const server = createServer();
+    const a = createDevice(server, 'a');
+    const b = createDevice(server, 'b');
+    const { notebook, page } = await a.repo.createNotebook('Mathe');
+    await a.sync();
+    await b.sync();
+    await b.repo.closeNotebook(notebook.id);
+    expect(await b.repo.listNotebooks()).toEqual([]);
+    expect((await b.repo.listClosedNotebooks()).map((n) => n.name)).toEqual(['Mathe']);
+
+    // changed elsewhere while closed here: not downloaded
+    await a.repo.updatePage(page.id, { title: 'Neu von A' });
+    await a.sync();
+    const r = await b.sync();
+    expect(r.errors).toEqual([]);
+    expect((await b.db.pages.get(page.id))?.title).toBe('');
+    // the closed notebook stays on the device, and the server keeps it too
+    expect(await b.db.notebooks.get(notebook.id)).toBeTruthy();
+    expect(server.listFiles().some((f) => f.startsWith('NextNote/Mathe/'))).toBe(true);
+
+    await b.repo.reopenNotebook(notebook.id);
+    await b.sync();
+    expect((await b.db.pages.get(page.id))?.title).toBe('Neu von A');
+    expect((await b.repo.listNotebooks()).map((n) => n.name)).toEqual(['Mathe']);
+  });
 });

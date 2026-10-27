@@ -58,7 +58,9 @@ export function SearchPanel() {
     if (!open) return [] as PageMeta[];
     const all = await db.pages.toArray();
     const sections = new Map((await db.sections.toArray()).map((s) => [s.id, s]));
-    return all.filter((p) => p.deletedAt === null && sections.get(p.sectionId)?.deletedAt === null);
+    // like OneNote: closed notebooks are not searched
+    const closed = new Set((await db.notebooks.toArray()).filter((n) => n.closedAt).map((n) => n.id));
+    return all.filter((p) => p.deletedAt === null && sections.get(p.sectionId)?.deletedAt === null && !closed.has(p.notebookId));
   }, [open]);
   const names = useLiveQuery(async () => {
     const nbs = new Map((await db.notebooks.toArray()).map((n) => [n.id, n]));
