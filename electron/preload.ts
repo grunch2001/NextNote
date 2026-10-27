@@ -13,5 +13,5 @@ contextBridge.exposeInMainWorld('nextnoteNative', {
   clipboardRead: () => ipcRenderer.invoke('clipboardRead'),
   clipboardWriteText: (text: string) => ipcRenderer.invoke('clipboardWriteText', text),
   os: process.platform,
-  version: '1.1.0',
+  version: '1.2.0',
 });
