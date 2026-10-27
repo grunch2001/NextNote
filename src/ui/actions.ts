@@ -1,9 +1,14 @@
-import { repo } from '../state/repo';
+import { pdfRepo, repo } from '../state/repo';
 import { db } from '../db/db';
 import { useUI } from '../state/ui';
 import type { ID } from '../model/types';
 import { orderBetween } from '../model/util';
+import { syncManager } from '../sync/manager';
+import { joinPath } from '../sync/webdav';
+import { isPdfName, pdfTitle } from '../pdf/repo';
 import { confirmDialog, promptDialog } from './Dialogs';
+import { pickNextcloudFolder } from './FolderPicker';
+import { pickFiles } from './assets';
 import { toast } from './Toasts';
 
 let focusTitleOnNextPage = false;
@@ -32,10 +37,100 @@ export async function newSection(notebookId?: ID | null) {
   useUI.getState().openPage(page?.id ?? null, section.id, nb);
 }
 
+/** A section that shows the PDFs of a Nextcloud folder. */
+export async function newPdfSection(notebookId?: ID | null) {
+  const nb = notebookId ?? useUI.getState().notebookId;
+  if (!nb) return newNotebook();
+  if (!syncManager.configured) {
+    toast('Verbinde NextNote zuerst in den Einstellungen mit deiner Nextcloud.', 'error');
+    return;
+  }
+  const folder = await pickNextcloudFolder();
+  if (folder === null) return;
+  const name = folder.split('/').at(-1) || 'PDFs';
+  const section = await repo.createSection(nb, name, { pdfFolder: folder });
+  useUI.getState().openSection(section.id, nb);
+  toast(`Die PDFs aus „${folder}“ werden geladen …`);
+  void syncManager.syncNow();
+}
+
+/** Adds PDFs from this device to the Nextcloud folder of a PDF section (optionally into a sub folder). */
+export async function addPdfFiles(sectionId: ID, folder = '') {
+  const files = (await pickFiles('application/pdf,.pdf', { multiple: true })).filter((f) => isPdfName(f.name) || f.type === 'application/pdf');
+  if (!files.length) return;
+  let first: ID | null = null;
+  for (const f of files) {
+    try {
+      const doc = await pdfRepo.addFile(sectionId, f.name, new Uint8Array(await f.arrayBuffer()), folder);
+      first ??= doc.id;
+    } catch (e) {
+      toast(`„${f.name}“ konnte nicht hinzugefügt werden: ${e instanceof Error ? e.message : e}`, 'error');
+    }
+  }
+  if (first) useUI.getState().openPage(first, sectionId);
+  void syncManager.syncNow();
+}
+
+export async function renamePdf(id: ID) {
+  const doc = await pdfRepo.getDoc(id);
+  const section = doc && (await db.sections.get(doc.sectionId));
+  if (!doc || !section?.pdfFolder) return;
+  const name = (await promptDialog({ title: 'PDF umbenennen', label: 'Name', value: pdfTitle(doc.path), ok: 'Umbenennen' }))?.trim();
+  if (!name || name === pdfTitle(doc.path)) return;
+  if (/[\/:*?"<>|]/.test(name)) {
+    toast('Der Name darf keines dieser Zeichen enthalten: \\ / : * ? " < > |', 'error');
+    return;
+  }
+  const dir = doc.path.split('/').slice(0, -1).join('/');
+  const path = joinPath(dir, isPdfName(name) ? name : `${name}.pdf`);
+  if (doc.etag === null) {
+    // not uploaded yet: it gets the new name with the upload
+    await pdfRepo.setPath(id, path);
+    return;
+  }
+  const client = syncManager.client();
+  if (!client) {
+    toast('Umbenennen geht nur mit Verbindung zu Nextcloud.', 'error');
+    return;
+  }
+  try {
+    if (!(await client.move(joinPath(section.pdfFolder, doc.path), joinPath(section.pdfFolder, path)))) {
+      toast(`Eine Datei „${pdfTitle(path)}“ gibt es in diesem Ordner schon.`, 'error');
+      return;
+    }
+    await pdfRepo.setPath(id, path);
+    void syncManager.syncNow();
+  } catch (e) {
+    toast(`Umbenennen hat nicht geklappt: ${e instanceof Error ? e.message : e}`, 'error');
+  }
+}
+
+export async function deletePdf(id: ID) {
+  const doc = await pdfRepo.getDoc(id);
+  if (!doc) return;
+  const ok = await confirmDialog({
+    title: 'PDF löschen',
+    message: `„${pdfTitle(doc.path)}“ wird aus dem Nextcloud-Ordner gelöscht, auf allen Geräten. In Nextcloud landet die Datei im Papierkorb und kann dort wiederhergestellt werden.`,
+    ok: 'Löschen',
+    danger: true,
+  });
+  if (!ok) return;
+  const siblings = await pdfRepo.listDocs(doc.sectionId);
+  await pdfRepo.trash(id);
+  const ui = useUI.getState();
+  if (ui.pageId === id) {
+    const idx = siblings.findIndex((d) => d.id === id);
+    ui.openPage((siblings[idx + 1] ?? siblings[idx - 1])?.id ?? null);
+  }
+  void syncManager.syncNow();
+}
+
 export async function newPage(opts: { subpage?: boolean; sectionId?: ID } = {}) {
   const ui = useUI.getState();
   const sectionId = opts.sectionId ?? ui.sectionId;
   if (!sectionId) return newSection();
+  // a PDF section has no pages, only the PDFs of its folder
+  if ((await db.sections.get(sectionId))?.pdfFolder) return addPdfFiles(sectionId);
   let page;
   if (opts.subpage && ui.pageId) {
     const cur = await db.pages.get(ui.pageId);
@@ -86,7 +181,8 @@ export async function deleteSection(id: ID) {
     const rest = await repo.listSections(s.notebookId);
     ui.openSection(rest[0]?.id ?? null, s.notebookId);
   }
-  toast(`Abschnitt „${s.name}“ in den Papierkorb verschoben`, 'info', { label: 'Rückgängig', run: () => void repo.restoreSection(id) });
+  const msg = s.pdfFolder ? `Abschnitt „${s.name}“ in den Papierkorb verschoben. Die PDFs bleiben in Nextcloud.` : `Abschnitt „${s.name}“ in den Papierkorb verschoben`;
+  toast(msg, 'info', { label: 'Rückgängig', run: () => void repo.restoreSection(id) });
 }
 
 export async function deletePages(ids: ID[]) {
@@ -146,11 +242,15 @@ export async function moveNotebookBefore(id: ID, beforeId: ID | null) {
 }
 
 export async function movePagesTo(pageId: ID, sectionId: ID, beforeId: ID | null) {
+  const target = await db.sections.get(sectionId);
+  if (target?.pdfFolder) {
+    toast('In einen PDF-Ordner lassen sich keine Seiten verschieben.');
+    return;
+  }
   const group = await pageGroup(pageId);
   if (beforeId && group.includes(beforeId)) return;
   const metas = await db.pages.bulkGet(group);
   const base = metas[0]?.level ?? 0;
-  const target = await db.sections.get(sectionId);
   await repo.movePages(group, sectionId, beforeId, metas.map((m) => Math.max(0, (m?.level ?? 0) - (beforeId ? 0 : base))));
   const ui = useUI.getState();
   if (ui.pageId && group.includes(ui.pageId) && target) ui.openPage(ui.pageId, sectionId, target.notebookId);

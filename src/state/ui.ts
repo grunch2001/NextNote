@@ -17,6 +17,8 @@ interface UIState {
   sectionId: ID | null;
   pageId: ID | null;
   expanded: Record<ID, boolean>;
+  /** Collapsed sub folders of PDF sections, key "<sectionId>/<path>". */
+  collapsedFolders: Record<string, boolean>;
   lastPageBySection: Record<ID, ID>;
   lastSectionByNotebook: Record<ID, ID>;
   navOpen: boolean;
@@ -55,6 +57,7 @@ export const useUI = create<UIState>()(
       sectionId: null,
       pageId: null,
       expanded: {},
+      collapsedFolders: {},
       lastPageBySection: {},
       lastSectionByNotebook: {},
       navOpen: true,
@@ -132,6 +135,7 @@ export const useUI = create<UIState>()(
         sectionId: s.sectionId,
         pageId: s.pageId,
         expanded: s.expanded,
+        collapsedFolders: s.collapsedFolders,
         lastPageBySection: s.lastPageBySection,
         lastSectionByNotebook: s.lastSectionByNotebook,
         navOpen: s.navOpen,

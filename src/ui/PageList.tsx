@@ -10,6 +10,7 @@ import { changeLevel, deletePages, movePagesTo, newPage } from './actions';
 import { beginDrag, dropClass, useDnd, type DragPayload, type DropTarget } from './dnd';
 import { openMoveDialog } from './MoveDialog';
 import { PaneFoot } from './PaneToggles';
+import { PdfList } from './PdfList';
 
 function shortDate(ts: number) {
   const d = new Date(ts);
@@ -107,6 +108,7 @@ export function PageList() {
   const section = useLiveQuery(() => (sectionId ? db.sections.get(sectionId) : undefined), [sectionId]);
   const pages = useLiveQuery(() => (sectionId ? repo.listPages(sectionId) : Promise.resolve([] as PageMeta[])), [sectionId]) ?? [];
 
+  if (section?.pdfFolder && section.deletedAt === null) return <PdfList section={section} />;
   return (
     <aside className="page-list" aria-label="Seiten">
       <div className="pane-head" style={section ? { boxShadow: `inset 0 3px 0 ${section.color}` } : undefined}>

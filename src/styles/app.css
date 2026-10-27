@@ -2128,3 +2128,175 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ------------------------------------------------------------------ PDF sections */
+
+.section-kind {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+
+.pdf-folder-path {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: -6px 12px 6px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pdf-folder-path svg {
+  flex-shrink: 0;
+}
+
+.pdf-folder-row {
+  gap: 4px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.pdf-folder-row .chev {
+  width: 15px;
+}
+
+.pdf-folder-icon {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+
+.pdf-folder-count {
+  margin-right: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pdf-row-state {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--accent-text);
+}
+
+.pdf-empty {
+  padding: 10px 10px 6px;
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
+/* folder picker */
+
+.dialog.folder-picker {
+  width: min(560px, 100%);
+}
+
+.folder-picker .dialog-foot {
+  flex-wrap: wrap;
+}
+
+.folder-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 2px 0 8px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--surface-3);
+}
+
+.crumb-wrap {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  border-radius: 5px;
+  padding: 4px 6px;
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.crumb:hover {
+  background: var(--row-hover);
+}
+
+.crumb-wrap:last-child .crumb {
+  font-weight: 600;
+}
+
+.crumb-sep {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.folder-list {
+  min-height: 180px;
+  max-height: min(46vh, 380px);
+}
+
+.folder-list .move-item {
+  color: var(--text);
+}
+
+.folder-icon {
+  flex-shrink: 0;
+  color: var(--accent-text);
+}
+
+.folder-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.folder-go {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+
+.folder-msg {
+  padding: 12px 10px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.folder-msg.error {
+  color: var(--danger);
+}
+
+.folder-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  margin: 10px 2px 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.folder-summary.warn {
+  color: var(--warn);
+}
+
+.dialog-foot .ghost-left {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

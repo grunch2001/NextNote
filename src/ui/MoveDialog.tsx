@@ -72,11 +72,14 @@ export function MoveDialog() {
               <div className="move-group-title">
                 <BookOpen size={16} style={{ color: nb.color }} /> {nb.name}
               </div>
-              {sections.map((s) => (
-                <button key={s.id} type="button" className={`move-item indent${choice === s.id ? ' active' : ''}`} onClick={() => setChoice(s.id)}>
-                  <span className="section-tab" style={{ background: s.color }} /> {s.name}
-                </button>
-              ))}
+              {/* pages cannot go into a PDF section */}
+              {sections
+                .filter((s) => !s.pdfFolder)
+                .map((s) => (
+                  <button key={s.id} type="button" className={`move-item indent${choice === s.id ? ' active' : ''}`} onClick={() => setChoice(s.id)}>
+                    <span className="section-tab" style={{ background: s.color }} /> {s.name}
+                  </button>
+                ))}
             </div>
           ),
         )}

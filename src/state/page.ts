@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { JSONContent } from '@tiptap/core';
-import { repo } from './repo';
+import { pdfRepo, repo } from './repo';
+import { pdfAssetOwner } from '../db/repo';
+import { isPdfDirty } from '../pdf/repo';
 import { mergeBodies } from '../model/merge';
 import type { ID, PageElement } from '../model/types';
 import { debounce, now } from '../model/util';
@@ -15,6 +17,9 @@ interface Op {
 
 interface PageState {
   pageId: ID | null;
+  /** 'pdf': a PDF of a PDF section, its annotations are saved into the file. */
+  kind: 'page' | 'pdf';
+  /** Owner of new pictures: the notebook, or for a PDF the PDF itself. */
   notebookId: ID | null;
   loading: boolean;
   elements: Record<ID, PageElement>;
@@ -41,6 +46,7 @@ export interface DragTransform {
 
 export const usePage = create<PageState>(() => ({
   pageId: null,
+  kind: 'page',
   notebookId: null,
   loading: false,
   elements: {},
@@ -84,7 +90,25 @@ async function persist() {
     elements = { ...elements };
     for (const id of draftTexts) delete elements[id];
   }
-  await repo.savePageBody(s.pageId, { id: s.pageId, elements, tombstones: s.tombstones });
+  const body = { id: s.pageId, elements, tombstones: s.tombstones };
+  if (s.kind === 'pdf') await pdfRepo.saveBody(s.pageId, body);
+  else await repo.savePageBody(s.pageId, body);
+}
+
+/** A closed PDF with unsaved annotations may be uploaded now. */
+function closedPdf(id: ID) {
+  void pdfRepo.getDoc(id).then((d) => {
+    if (d && isPdfDirty(d)) pdfRepo.onChange?.(id);
+  });
+}
+
+/** Loads a page or a PDF document. */
+async function loadDoc(id: ID): Promise<{ kind: PageState['kind']; notebookId: ID; body: { elements: Record<ID, PageElement>; tombstones: Record<ID, number> } } | null> {
+  const page = await repo.getPage(id);
+  if (page) return { kind: 'page', notebookId: page.meta.notebookId, body: page.body };
+  const doc = await pdfRepo.getDoc(id);
+  if (!doc || doc.deletedAt !== null) return null;
+  return { kind: 'pdf', notebookId: pdfAssetOwner(id), body: await pdfRepo.getBody(id) };
 }
 
 function markDirty() {
@@ -159,16 +183,22 @@ export const pageActions = {
     batch = null;
     measured.clear();
     draftTexts.clear();
+    const prevPdf = usePage.getState().kind === 'pdf' ? usePage.getState().pageId : null;
+    if (prevPdf && prevPdf !== pageId) pdfRepo.openId = null;
     if (!pageId) {
-      usePage.setState({ pageId: null, notebookId: null, elements: {}, tombstones: {}, selection: [], undoStack: [], redoStack: [], loading: false });
+      usePage.setState({ pageId: null, kind: 'page', notebookId: null, elements: {}, tombstones: {}, selection: [], undoStack: [], redoStack: [], loading: false });
+      if (prevPdf) closedPdf(prevPdf);
       return;
     }
     usePage.setState({ loading: true });
-    const page = await repo.getPage(pageId);
+    const page = await loadDoc(pageId);
     if (seq !== loadSeq) return;
+    if (page?.kind === 'pdf') pdfRepo.openId = pageId;
+    if (prevPdf && prevPdf !== pageId) closedPdf(prevPdf);
     usePage.setState({
       pageId,
-      notebookId: page?.meta.notebookId ?? null,
+      kind: page?.kind ?? 'page',
+      notebookId: page?.notebookId ?? null,
       elements: page?.body.elements ?? {},
       tombstones: page?.body.tombstones ?? {},
       selection: [],
@@ -183,20 +213,20 @@ export const pageActions = {
   async reloadFromDb() {
     const s = usePage.getState();
     if (!s.pageId) return;
-    const page = await repo.getPage(s.pageId);
+    const page = await loadDoc(s.pageId);
     if (!page || usePage.getState().pageId !== s.pageId) return;
     const cur = usePage.getState();
     if (!dirty) {
       usePage.setState({
         elements: page.body.elements,
         tombstones: page.body.tombstones,
-        notebookId: page.meta.notebookId,
+        notebookId: page.notebookId,
         selection: cur.selection.filter((id) => page.body.elements[id]),
       });
       return;
     }
     const merged = mergeBodies({ elements: cur.elements, tombstones: cur.tombstones }, page.body, {});
-    usePage.setState({ elements: merged.elements, tombstones: merged.tombstones, notebookId: page.meta.notebookId });
+    usePage.setState({ elements: merged.elements, tombstones: merged.tombstones, notebookId: page.notebookId });
     markDirty();
   },
 

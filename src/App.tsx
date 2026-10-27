@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/db';
-import { repo } from './state/repo';
+import { pdfRepo, repo } from './state/repo';
+import { pdfHooks } from './pdf/repo';
+import { imageToPng, pdfjsPageBoxes } from './ui/pdf';
+import { FolderPicker } from './ui/FolderPicker';
 import { useUI } from './state/ui';
 import { useSettings } from './state/settings';
 import { syncManager } from './sync/manager';
@@ -35,6 +38,8 @@ function useValidSelection() {
   const notebookId = useUI((s) => s.notebookId);
   const sectionId = useUI((s) => s.sectionId);
   const pageId = useUI((s) => s.pageId);
+  // PDFs of a PDF section arrive with the sync
+  const pdfCount = useLiveQuery(() => (sectionId ? db.pdfDocs.where('sectionId').equals(sectionId).count() : 0), [sectionId]);
   useEffect(() => {
     if (!state) return;
     let cancelled = false;
@@ -52,7 +57,7 @@ function useValidSelection() {
         if (!cancelled && (ui.notebookId !== nb.id || ui.sectionId || ui.pageId)) ui.openPage(null, null, nb.id);
         return;
       }
-      const pages = await repo.listPages(sec.id);
+      const pages = sec.pdfFolder ? await pdfRepo.listDocs(sec.id) : await repo.listPages(sec.id);
       const page = pages.find((p) => p.id === ui.pageId) ?? pages.find((p) => p.id === ui.lastPageBySection[sec.id]) ?? pages[0] ?? null;
       if (cancelled) return;
       if (ui.notebookId !== nb.id || ui.sectionId !== sec.id || ui.pageId !== (page?.id ?? null)) {
@@ -62,7 +67,7 @@ function useValidSelection() {
     return () => {
       cancelled = true;
     };
-  }, [state, notebookId, sectionId, pageId]);
+  }, [state, notebookId, sectionId, pageId, pdfCount]);
   return state;
 }
 
@@ -128,7 +133,8 @@ function useGlobalShortcuts() {
         useUI.setState({ searchOpen: true });
       } else if (key === 's') {
         e.preventDefault();
-        if (syncManager.configured) void syncManager.syncNow();
+        // also saves an open PDF to Nextcloud right away
+        if (syncManager.configured) void syncManager.syncNow({ force: true });
         else toast('Alles ist lokal gespeichert. Verbinde Nextcloud, um zu synchronisieren.');
       } else if (key === ',') {
         e.preventDefault();
@@ -206,6 +212,7 @@ export function App() {
       <OneNoteImport />
       <RecycleBin />
       <MoveDialog />
+      <FolderPicker />
       <DialogHost />
       <MenuHost />
       <DragGhost />
@@ -221,5 +228,7 @@ export async function bootstrap() {
     // not supported
   }
   await db.open();
+  pdfHooks.pageBoxes = pdfjsPageBoxes;
+  pdfHooks.toPng = imageToPng;
   await syncManager.init();
 }

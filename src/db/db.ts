@@ -1,9 +1,15 @@
 import Dexie, { type Table } from 'dexie';
-import type { AssetRecord, DeletionRecord, Notebook, PageBody, PageMeta, Section } from '../model/types';
+import type { AssetRecord, DeletionRecord, Notebook, PageBody, PageMeta, PdfDoc, Section } from '../model/types';
 
 export interface KV {
   k: string;
   v: unknown;
+}
+
+/** A PDF file without NextNote's annotations (those live in pdfBodies). */
+export interface PdfFileRecord {
+  id: string;
+  data: ArrayBuffer;
 }
 
 export class NextNoteDB extends Dexie {
@@ -14,6 +20,9 @@ export class NextNoteDB extends Dexie {
   assets!: Table<AssetRecord, string>;
   deletions!: Table<DeletionRecord, string>;
   kv!: Table<KV, string>;
+  pdfDocs!: Table<PdfDoc, string>;
+  pdfBodies!: Table<PageBody, string>;
+  pdfFiles!: Table<PdfFileRecord, string>;
 
   constructor(name = 'nextnote') {
     super(name);
@@ -25,6 +34,11 @@ export class NextNoteDB extends Dexie {
       assets: 'id, notebookId, [notebookId+uploaded]',
       deletions: 'key, notebookId',
       kv: 'k',
+    });
+    this.version(2).stores({
+      pdfDocs: 'id, sectionId',
+      pdfBodies: 'id',
+      pdfFiles: 'id',
     });
   }
 

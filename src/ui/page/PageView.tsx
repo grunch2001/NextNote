@@ -5,16 +5,19 @@ import { db } from '../../db/db';
 import { repo } from '../../state/repo';
 import { CanvasController } from '../../ink/controller';
 import { elementBounds, elementsOrigin, translateElement, unionRect } from '../../ink/geometry';
-import { ClipboardPaste, SquareDashedMousePointer, Type } from 'lucide-react';
+import { ClipboardPaste, CloudUpload, SquareDashedMousePointer, Type } from 'lucide-react';
 import { editorsById, setLastInputKind, targetEditor } from '../../editor/active';
 import { paragraphDoc } from '../../model/text';
-import type { ID, ImageElement, PageElement, PageMeta, TextElement } from '../../model/types';
+import type { ID, ImageElement, PageElement, PageMeta, PdfDoc, TextElement } from '../../model/types';
 import { debounce, newId, now } from '../../model/util';
 import { draftTexts, elementClipboard, measured, pageActions, setElementClipboard, usePage } from '../../state/page';
 import { useUI } from '../../state/ui';
-import { syncManager } from '../../sync/manager';
+import { syncManager, useSync } from '../../sync/manager';
+import { pdfLayout } from '../../pdf/layout';
+import { isPdfDirty } from '../../pdf/repo';
 import { platform } from '../../platform';
 import { createImageElement } from '../assets';
+import { renderPdf } from '../pdf';
 import { isDarkNow } from '../theme';
 import { toast } from '../Toasts';
 import { consumeFocusTitle } from '../actions';
@@ -22,6 +25,7 @@ import { CLIPBOARD_MARKER, noteMarkerCopied, readPasteSource, textMeansElements 
 import { openMenu } from '../Dialogs';
 import { ImageView } from './ImageView';
 import { InkLayer } from './InkLayer';
+import { PdfPages } from './PdfPages';
 import { duplicateSelection, SelectionOverlay } from './SelectionOverlay';
 import { TextContainer } from './TextContainer';
 
@@ -92,10 +96,41 @@ function PageHeader({ meta }: { meta: PageMeta }) {
   );
 }
 
+/** Save state of an open PDF; tapping it uploads right away. */
+function PdfStatus({ doc }: { doc: PdfDoc }) {
+  const status = useSync((s) => s.status);
+  const connected = useSync((s) => !!s.account);
+  if (doc.readOnly) return <div className="pdf-banner">{doc.readOnly} Anmerkungen bleiben nur auf diesem Gerät.</div>;
+  if (!isPdfDirty(doc)) return null;
+  return (
+    <button
+      type="button"
+      className="pdf-unsaved"
+      onClick={() => void syncManager.syncNow({ force: true })}
+      disabled={!connected}
+      title="Jetzt in Nextcloud speichern (Strg+S)"
+    >
+      <CloudUpload size={15} />
+      {status === 'syncing' ? 'Wird gespeichert …' : connected ? 'Noch nicht in Nextcloud gespeichert' : 'Nur auf diesem Gerät gespeichert'}
+    </button>
+  );
+}
+
 export function PageView() {
   const pageId = useUI((s) => s.pageId);
   const zoom = useUI((s) => s.zoom);
-  const meta = useLiveQuery(() => (pageId ? db.pages.get(pageId) : undefined), [pageId]);
+  // a page, or a PDF of a PDF section (undefined while loading, null if it does not exist)
+  const opened = useLiveQuery(async () => {
+    if (!pageId) return null;
+    const page = await db.pages.get(pageId);
+    if (page) return { meta: page, pdf: null };
+    const pdf = await db.pdfDocs.get(pageId);
+    return pdf && pdf.deletedAt === null ? { meta: null, pdf } : null;
+  }, [pageId]);
+  const meta = opened?.meta ?? null;
+  const pdf = opened?.pdf ?? null;
+  const pdfPages = pdf?.pages ?? null;
+  const layout = useMemo(() => (pdfPages ? pdfLayout(pdfPages) : null), [pdfPages]);
   const elements = usePage((s) => s.elements);
   const loadedId = usePage((s) => s.pageId);
   const selection = usePage((s) => s.selection);
@@ -139,7 +174,7 @@ export function PageView() {
     ro.observe(s);
     setView({ w: s.offsetWidth, h: s.offsetHeight });
     return () => ro.disconnect();
-  }, [pageId, !!meta]);
+  }, [pageId, !!opened]);
 
   const createTextAt = useCallback((x: number, y: number, doc?: TextElement['doc']): ID | null => {
     const s = usePage.getState();
@@ -173,7 +208,8 @@ export function PageView() {
     if (!s || !c) return { x: 60, y: 140 };
     const r = s.getBoundingClientRect();
     const p = c.toPage(r.left + Math.min(r.width / 2, 360), r.top + Math.min(r.height / 3, 240));
-    return { x: Math.max(20, p.x - 100), y: Math.max(110, p.y) };
+    // below the title of a page; on a PDF anywhere
+    return { x: Math.max(20, p.x - 100), y: Math.max(usePage.getState().kind === 'pdf' ? 20 : 110, p.y) };
   }, []);
 
   const insertImages = useCallback(async (files: File[], at?: { x: number; y: number }) => {
@@ -201,9 +237,12 @@ export function PageView() {
     const nb = usePage.getState().notebookId;
     const pageAtStart = usePage.getState().pageId;
     if (!nb || !pageAtStart) return;
+    if (usePage.getState().kind === 'pdf') {
+      toast('In eine PDF lässt sich kein PDF-Ausdruck einfügen. Lege die PDF stattdessen in den Ordner des Abschnitts.');
+      return;
+    }
     toast(`„${file.name}“ wird eingefügt …`);
     try {
-      const { renderPdf } = await import('../pdf');
       const pages = await renderPdf(file);
       const all = Object.values(usePage.getState().elements);
       const bottom = unionRect(all.map((el) => elementBounds(el, measured)));
@@ -326,7 +365,8 @@ export function PageView() {
       scroller,
       page,
       canvas,
-      isDark: isDarkNow,
+      // PDF pages stay white: no light ink in dark mode
+      isDark: () => isDarkNow() && usePage.getState().kind !== 'pdf',
       createTextAt: (x, y) => createTextAt(x, y),
       onPageMenu: (x, y) => showPageMenuRef.current(x, y),
     });
@@ -335,7 +375,7 @@ export function PageView() {
       c.destroy();
       controllerRef.current = null;
     };
-  }, [createTextAt, pageId, !!meta]);
+  }, [createTextAt, pageId, !!opened]);
 
   // keyboard, clipboard, drag & drop
   useEffect(() => {
@@ -452,7 +492,7 @@ export function PageView() {
       scroller?.removeEventListener('dragover', onDragOver);
       scroller?.removeEventListener('drop', onDrop);
     };
-  }, [createTextAt, insertImages, insertPdf, pasteElements, viewCenter, pageId, !!meta]);
+  }, [createTextAt, insertImages, insertPdf, pasteElements, viewCenter, pageId, !!opened]);
 
   // scroll to the top when another page opens
   useEffect(() => {
@@ -468,11 +508,18 @@ export function PageView() {
   // The scroll area depends on the content only; CSS stretches it to the visible area.
   // Sizing it from the visible area made the scrollbars flicker at zoom levels other than
   // 100 %: a fraction of a pixel too much showed them, which shrank the area, which hid them …
-  const contentW = Math.max((bounds ? bounds.x + bounds.w : 0) + 320, 860);
-  const contentH = (bounds ? bounds.y + bounds.h : 0) + 480;
+  let contentW = Math.max((bounds ? bounds.x + bounds.w : 0) + 320, 860);
+  let contentH = (bounds ? bounds.y + bounds.h : 0) + 480;
   // the page itself covers the visible area (the sizer clips what is beyond)
-  const width = Math.max(view.w / zoom, contentW);
-  const height = Math.max(view.h / zoom, contentH);
+  let width = Math.max(view.w / zoom, contentW);
+  let height = Math.max(view.h / zoom, contentH);
+  // a PDF has the size of its pages and sits in the middle
+  let left = 0;
+  if (layout) {
+    contentW = width = layout.width;
+    contentH = height = layout.height;
+    left = Math.max(0, Math.floor((view.w - layout.width * zoom) / 2));
+  }
   const sel = useMemo(() => new Set(selection), [selection]);
 
   if (!pageId) {
@@ -482,11 +529,18 @@ export function PageView() {
       </div>
     );
   }
-  if (meta === undefined) return <div className="page-view" />;
-  if (meta === null || !meta) {
+  if (opened === undefined) return <div className="page-view" />;
+  if (opened === null) {
     return (
       <div className="page-view empty">
         <div className="page-empty-hint">Diese Seite existiert nicht mehr.</div>
+      </div>
+    );
+  }
+  if (pdf && !layout) {
+    return (
+      <div className="page-view empty">
+        <div className="page-empty-hint">{pdf.readOnly ?? 'Die PDF wird aus Nextcloud geladen …'}</div>
       </div>
     );
   }
@@ -496,15 +550,16 @@ export function PageView() {
   const texts = list.filter((e): e is TextElement => e.type === 'text').sort((a, b) => a.z - b.z);
 
   return (
-    <div className="page-view">
+    <div className={`page-view${pdf ? ' pdf-view' : ''}`}>
       <div className="page-scroller" ref={scrollerRef}>
-        <div className="page-sizer" style={{ width: contentW * zoom, height: contentH * zoom }}>
+        <div className="page-sizer" style={{ width: (left + contentW * zoom), height: contentH * zoom }}>
           <div
             ref={pageRef}
-            className={`page rule-${meta.rule}${meta.bgColor ? ' has-color' : ''}`}
-            style={{ width, height, transform: `scale(${zoom})`, ['--page-color' as string]: meta.bgColor ?? undefined }}
+            className={meta ? `page rule-${meta.rule}${meta.bgColor ? ' has-color' : ''}` : 'page pdf-doc'}
+            style={{ left, width, height, transform: `scale(${zoom})`, ['--page-color' as string]: meta?.bgColor ?? undefined }}
           >
-            <PageHeader key={meta.id} meta={meta} />
+            {meta && <PageHeader key={meta.id} meta={meta} />}
+            {pdf && layout && <PdfPages docId={pdf.id} version={pdf.dataVersion} slots={layout.slots} zoom={zoom} scroller={scrollerRef.current} />}
             {ready && images.map((el) => <ImageView key={el.id} el={el} selected={sel.has(el.id)} drag={sel.has(el.id) ? drag : null} />)}
             {ready &&
               texts.map((el) => (
@@ -516,6 +571,7 @@ export function PageView() {
         </div>
       </div>
       <canvas ref={canvasRef} className="live-ink" />
+      {pdf && <PdfStatus doc={pdf} />}
       {zoom !== 1 && (
         <button type="button" className="zoom-badge" onClick={() => useUI.getState().setZoom(1)} title="Zoom zurücksetzen">
           {Math.round(zoom * 100)} %

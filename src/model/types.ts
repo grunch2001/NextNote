@@ -37,6 +37,43 @@ export interface Section extends SyncFields {
   createdAt: number;
   deletedAt: number | null;
   times: FieldTimes;
+  /** PDF section: Nextcloud folder (relative to the user's files) whose PDFs it shows. Missing/null: a normal section. */
+  pdfFolder?: string | null;
+}
+
+/** Size of a PDF page as displayed (rotation applied) in CSS pixels at 100 %. */
+export interface PdfPageBox {
+  w: number;
+  h: number;
+}
+
+/** A PDF in the Nextcloud folder of a PDF section. Its annotations are stored in the file itself. */
+export interface PdfDoc {
+  id: ID;
+  sectionId: ID;
+  /** Path relative to the section folder, e.g. "Übungen/Blatt 1.pdf". */
+  path: string;
+  /** Nextcloud file id: follows the file when it is renamed or moved within the folder. */
+  fileId: string | null;
+  /** ETag of the remote file the local copy corresponds to, null if it was never uploaded. */
+  etag: string | null;
+  size: number;
+  lastModified: number;
+  /** Page sizes, null until the file is available locally. */
+  pages: PdfPageBox[] | null;
+  /** Local revision of the annotations; rev > syncedRev means "not yet saved to Nextcloud". */
+  rev: number;
+  syncedRev: number;
+  /** Element updatedAt values at the last sync, for conflict detection. */
+  base: Record<ID, number>;
+  /** Deleted locally, the file still has to be deleted in Nextcloud. */
+  deletedAt: number | null;
+  /** Why annotations cannot be written into this file (e.g. password protected), null if they can. */
+  readOnly: string | null;
+  /** Bumped whenever the stored PDF file changes, so that it is rendered again. */
+  dataVersion: number;
+  /** Identifies the stored file without annotations (see ReadResult.baseId). */
+  baseId: string | null;
 }
 
 export type RuleStyle = 'none' | 'lines' | 'lines-wide' | 'grid' | 'dots';

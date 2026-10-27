@@ -73,7 +73,7 @@ export async function resetSyncState(db: NextNoteDB): Promise<void> {
       a.uploaded = 0;
     });
     await db.deletions.clear();
-    const keys = (await db.kv.toCollection().primaryKeys()).filter((k) => k.startsWith('dirEtag:') || k === 'ignoredFolders');
+    const keys = (await db.kv.toCollection().primaryKeys()).filter((k) => k.startsWith('dirEtag:') || k.startsWith('pdfRoot:') || k === 'ignoredFolders');
     await db.kv.bulkDelete(keys);
     for (const id of await db.notebooks.toCollection().primaryKeys()) await db.kv.put({ k: `dirty:${id}`, v: 1 });
   });
@@ -566,6 +566,7 @@ export class SyncEngine {
             createdAt: r.createdAt,
             deletedAt: r.deletedAt,
             times: r.times,
+            pdfFolder: r.pdfFolder,
             rev: base.rev ?? 1,
             syncedRev: base.rev ?? 1,
             etag,

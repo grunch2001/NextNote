@@ -44,6 +44,17 @@ export function emptyBody(id: ID): PageBody {
   return { id, elements: {}, tombstones: {} };
 }
 
+/** Images on a PDF belong to this pseudo notebook: they are stored in the PDF, not in a NextNote folder. */
+export const pdfAssetOwner = (docId: ID) => `pdf:${docId}`;
+
+/** Removes the local copy of a PDF. Must run inside a transaction covering pdfDocs, pdfBodies, pdfFiles and assets. */
+export async function purgePdfDocInTx(db: NextNoteDB, docId: ID) {
+  await db.pdfDocs.delete(docId);
+  await db.pdfBodies.delete(docId);
+  await db.pdfFiles.delete(docId);
+  await db.assets.where('notebookId').equals(pdfAssetOwner(docId)).delete();
+}
+
 export class Repo {
   /** Called after every local modification (used to schedule a sync). */
   onChange: ((notebookId: ID) => void) | null = null;
@@ -132,8 +143,8 @@ export class Repo {
       .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt);
   }
 
-  /** Creates a section with one empty page (`withPage: false`: without). */
-  async createSection(notebookId: ID, name: string, opts: { afterId?: ID; withPage?: boolean } = {}): Promise<Section> {
+  /** Creates a section with one empty page (`withPage: false`: without). With `pdfFolder` a PDF section (never with a page). */
+  async createSection(notebookId: ID, name: string, opts: { afterId?: ID; withPage?: boolean; pdfFolder?: string } = {}): Promise<Section> {
     const ts = now();
     const sections = await this.listSections(notebookId);
     let order: number;
@@ -152,7 +163,8 @@ export class Repo {
       order,
       createdAt: ts,
       deletedAt: null,
-      times: { name: ts, color: ts, order: ts, deletedAt: ts },
+      times: { name: ts, color: ts, order: ts, deletedAt: ts, pdfFolder: ts },
+      pdfFolder: opts.pdfFolder ?? null,
       rev: 1,
       syncedRev: 0,
       etag: null,
@@ -161,7 +173,7 @@ export class Repo {
       await this.db.sections.put(section);
       await this.markDirty(notebookId);
     });
-    if (opts.withPage !== false) await this.createPage(section.id);
+    if (opts.withPage !== false && !opts.pdfFolder) await this.createPage(section.id);
     return section;
   }
 
@@ -185,14 +197,15 @@ export class Repo {
     return this.updateSection(id, { deletedAt: null });
   }
 
-  /** Permanently delete a section and all of its pages. */
+  /** Permanently delete a section and all of its pages. Of a PDF section only the local copies go, the PDFs stay in Nextcloud. */
   async purgeSection(id: ID): Promise<void> {
     const db = this.db;
-    await db.transaction('rw', [db.sections, db.pages, db.bodies, db.deletions, db.kv], async () => {
+    await db.transaction('rw', [db.sections, db.pages, db.bodies, db.deletions, db.kv, db.pdfDocs, db.pdfBodies, db.pdfFiles, db.assets], async () => {
       const s = await db.sections.get(id);
       if (!s) return;
       const pages = await db.pages.where('sectionId').equals(id).toArray();
       for (const p of pages) await this.purgePageInTx(p);
+      for (const docId of await db.pdfDocs.where('sectionId').equals(id).primaryKeys()) await purgePdfDocInTx(db, docId);
       await db.sections.delete(id);
       if (s.etag) await db.deletions.put({ key: `${s.notebookId}|sections/${id}.json`, notebookId: s.notebookId, path: `sections/${id}.json`, folder: '' });
       await this.markDirty(s.notebookId);

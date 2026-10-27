@@ -48,6 +48,13 @@
 - Seitenhintergrund: Farbe, Linien, Karos oder Punkte
 - Hell- und Dunkelmodus
 
+**PDFs beschriften**
+- Ein Abschnitt kann ein **Ordner deiner Nextcloud** sein (*Abschnitt hinzufügen → PDF-Ordner aus Nextcloud …*). Statt Seiten zeigt er die PDFs dieses Ordners, Unterordner aufklappbar wie Unterseiten
+- Eine PDF öffnet sich mit ihren Seiten untereinander; Stift, Textmarker, Radierer, Lasso, Formen, Text und Bilder funktionieren wie auf jeder Seite
+- Gespeichert wird **in die PDF selbst**, im gewählten Ordner, nicht im NextNote-Ordner. Die Anmerkungen sind normale PDF-Anmerkungen: Nextcloud, Acrobat, Samsung Notes und andere PDF-Programme zeigen sie an, der Inhalt der PDF bleibt unverändert
+- Alle PDFs des Ordners liegen auch offline auf dem Gerät. Hochgeladen wird, wenn du die PDF schließt, nach 30 Sekunden ohne Eingabe, wenn die App in den Hintergrund geht oder mit Strg+S
+- Haben zwei Geräte dieselbe PDF gleichzeitig beschriftet, werden die Anmerkungen zusammengeführt
+
 **Stift**
 - 4 Stifte und 3 Textmarker mit frei wählbarer Farbe und Stärke
 - Radierer für ganze Striche oder punktgenau
@@ -139,6 +146,7 @@ API-Berechtigungen musst du nicht eintragen: Bei der Anmeldung im Browser fragt 
 | Scrollen / Zoomen | Finger ziehen / zwei Finger spreizen; am PC Mausrad und Strg+Mausrad |
 | Kopieren & Einfügen | Auswahl → **Kopieren** in der Leiste über der Auswahl. Einfügen am Tablet: lange auf eine freie Stelle drücken → **Einfügen**; am PC Rechtsklick oder Strg+V. Text und Bilder aus anderen Apps funktionieren auch |
 | PDF beschriften | **Einfügen → PDF-Ausdruck** oder PDF auf die Seite ziehen |
+| PDFs aus einem Nextcloud-Ordner | *Abschnitt hinzufügen → PDF-Ordner aus Nextcloud …*, Ordner wählen. **+** in der Seitenleiste lädt eine PDF vom Gerät in den Ordner; Umbenennen und Löschen über das Kontextmenü „…“ |
 | Seite/Abschnitt verschieben | Ziehen (am Tablet am Griff ⠿) oder Kontextmenü „…“ → *Verschieben nach …* |
 | Unterseite | Kontextmenü einer Seite → *Tiefer stufen* oder Tab-Taste in der Seitenliste |
 
@@ -155,6 +163,7 @@ NextNote/
     assets/<id>.png|jpg      Bilder und PDF-Seiten
 ```
 
+- PDF-Abschnitte speichern unter `sections/` nur Name, Farbe und den Pfad ihres Nextcloud-Ordners. Die PDFs bleiben in diesem Ordner; NextNote schreibt seine Anmerkungen als PDF-Anmerkungen hinein (dazu, unsichtbar, die Originaldaten wie Druckstufen und formatierten Text, damit sie in NextNote bearbeitbar bleiben).
 - Gelöschte Seiten liegen 60 Tage im NextNote-Papierkorb. Endgültig gelöschte Dateien landen zusätzlich im Papierkorb deiner Nextcloud.
 - Einen Notizbuch-Ordner in der Nextcloud-Weboberfläche umzubenennen ist unproblematisch. Ihn zu löschen löscht das Notizbuch auf allen Geräten.
 
@@ -188,6 +197,7 @@ npm run icons             # App-Icons aus build-resources/icon.svg erzeugen
 | `src/model` | Datenmodell, Merge-Regeln (Last-Writer-Wins pro Element und Feld, Konfliktkopien), Dateiformate |
 | `src/db` | Lokale Datenbank (IndexedDB über Dexie) und alle Änderungsoperationen |
 | `src/sync` | WebDAV-Client, Nextcloud Login Flow v2, Sync-Engine (ETags, If-Match, Ordner-ETags, um unveränderte Notizbücher zu überspringen) |
+| `src/pdf` | PDF-Ordner: Seitenlayout und Umrechnung in PDF-Koordinaten (auch gedrehte Seiten), Lesen und Schreiben der Anmerkungen mit `@cantoo/pdf-lib`, Abgleich mit dem Nextcloud-Ordner |
 | `src/ink` | Stifteingabe, Gesten (Stift/Finger/Maus, Handballenerkennung, Zoom), Radierer, Lasso |
 | `src/ui`, `src/editor` | Oberfläche (React) und Rich-Text-Editor (TipTap) |
 | `src/import/onenote` | OneNote-Import: Microsoft-Anmeldung (OAuth mit PKCE), Graph-Client mit Drosselungs-Handling, Umwandlung des Seiten-HTML in Textcontainer und Bilder, InkML-Leser für die Handschrift |
@@ -230,6 +240,7 @@ Beide Dateien sind per `.gitignore` vom Repository ausgeschlossen. Bewahre sie s
 - Keine Handschrifterkennung (Umwandlung in Text)
 - OneNote-Import nur unter Windows und nur für Notizbücher in OneDrive; `.one`-Dateien lassen sich nicht direkt öffnen
 - Keine Audioaufnahmen und keine Dateianhänge außer Bildern und PDF-Ausdrucken
+- PDFs aus Nextcloud-Ordnern: Text in PDFs wird von der Suche nicht gefunden. Getippter Text erscheint in anderen PDF-Programmen in einer Standardschrift und vereinfacht (z. B. Tabellen); in NextNote bleibt er unverändert. Anmerkungen anderer Programme werden angezeigt, lassen sich in NextNote aber nicht bearbeiten. PDFs, die zum Öffnen ein Passwort brauchen, werden nicht unterstützt; PDFs, die nur gegen Änderungen geschützt sind, werden beim Speichern ohne diesen Schutz gespeichert
 - Oberfläche nur auf Deutsch
 - Das Windows-Installationsprogramm ist nicht code-signiert
 

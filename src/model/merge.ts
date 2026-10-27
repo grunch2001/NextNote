@@ -118,5 +118,5 @@ export function bodiesEqual(a: BodyLike, b: BodyLike): boolean {
 }
 
 export const NOTEBOOK_FIELDS = ['name', 'color', 'order'] as const;
-export const SECTION_FIELDS = ['name', 'color', 'order', 'deletedAt'] as const;
+export const SECTION_FIELDS = ['name', 'color', 'order', 'deletedAt', 'pdfFolder'] as const;
 export const PAGE_FIELDS = ['title', 'sectionId', 'order', 'level', 'deletedAt', 'bgColor', 'rule'] as const;

@@ -11,11 +11,14 @@ interface FileNode {
   etag: string;
   mtime: number;
   mime: string;
+  /** Nextcloud file id: kept when the file is overwritten or moved. */
+  id?: number;
 }
 
 interface DirNode {
   etag: string;
   mtime: number;
+  id?: number;
 }
 
 interface Flow {
@@ -51,6 +54,8 @@ export class MockNextcloud {
       this.dirs.set(u, new Map([['', { etag: this.newEtag(), mtime: Date.now() }]]));
     }
   }
+
+  private nextFileId = 100;
 
   private newEtag(): string {
     this.counter++;
@@ -200,9 +205,10 @@ form{background:#fff;color:#222;padding:24px;border-radius:12px;max-width:360px}
 
   private propXml(user: string, path: string, node: FileNode | DirNode, isDir: boolean): string {
     const lm = new Date(node.mtime).toUTCString();
+    node.id ??= this.nextFileId++;
     const props = isDir
-      ? `<d:getetag>&quot;${node.etag}&quot;</d:getetag><d:resourcetype><d:collection/></d:resourcetype><d:getlastmodified>${lm}</d:getlastmodified><oc:fileid>1</oc:fileid>`
-      : `<d:getetag>&quot;${node.etag}&quot;</d:getetag><d:resourcetype/><d:getlastmodified>${lm}</d:getlastmodified><d:getcontentlength>${(node as FileNode).data.byteLength}</d:getcontentlength><oc:fileid>2</oc:fileid>`;
+      ? `<d:getetag>&quot;${node.etag}&quot;</d:getetag><d:resourcetype><d:collection/></d:resourcetype><d:getlastmodified>${lm}</d:getlastmodified><oc:fileid>${node.id}</oc:fileid>`
+      : `<d:getetag>&quot;${node.etag}&quot;</d:getetag><d:resourcetype/><d:getlastmodified>${lm}</d:getlastmodified><d:getcontentlength>${(node as FileNode).data.byteLength}</d:getcontentlength><oc:fileid>${node.id}</oc:fileid>`;
     const missing = isDir ? '<d:propstat><d:prop><d:getcontentlength/></d:prop><d:status>HTTP/1.1 404 Not Found</d:status></d:propstat>' : '';
     return `<d:response><d:href>${this.hrefFor(user, path, isDir)}</d:href><d:propstat><d:prop>${props}</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>${missing}</d:response>`;
   }
@@ -249,7 +255,13 @@ form{background:#fff;color:#222;padding:24px;border-radius:12px;max-width:360px}
         }
         if (ifNoneMatch === '*' && file) return this.res(412, 'precondition failed');
         const data = req.body === undefined ? new Uint8Array() : typeof req.body === 'string' ? enc.encode(req.body) : new Uint8Array(req.body);
-        const node: FileNode = { data, etag: this.newEtag(), mtime: Date.now(), mime: this.header(req, 'content-type') ?? 'application/octet-stream' };
+        const node: FileNode = {
+          data,
+          etag: this.newEtag(),
+          mtime: Date.now(),
+          mime: this.header(req, 'content-type') ?? 'application/octet-stream',
+          id: file?.id ?? this.nextFileId++,
+        };
         files.set(path, node);
         this.touch(user, path);
         return this.res(file ? 204 : 201, '', { etag: `"${node.etag}"`, 'oc-etag': `"${node.etag}"` });
@@ -316,5 +328,40 @@ form{background:#fff;color:#222;padding:24px;border-radius:12px;max-width:360px}
   readFile(path: string, user = Object.keys(this.users)[0]): string | null {
     const f = this.files.get(user)!.get(path);
     return f ? dec.decode(f.data) : null;
+  }
+
+  readBytes(path: string, user = Object.keys(this.users)[0]): Uint8Array | null {
+    return this.files.get(user)!.get(path)?.data ?? null;
+  }
+
+  /** Test helper: creates or replaces a file (and missing parent folders) as if uploaded through the web interface. */
+  writeFile(path: string, data: Uint8Array | string, user = Object.keys(this.users)[0]) {
+    const dirs = this.dirs.get(user)!;
+    const segs = path.split('/').filter(Boolean);
+    for (let i = 1; i < segs.length; i++) {
+      const p = segs.slice(0, i).join('/');
+      if (!dirs.has(p)) dirs.set(p, { etag: this.newEtag(), mtime: Date.now() });
+    }
+    const files = this.files.get(user)!;
+    const prev = files.get(path);
+    files.set(path, {
+      data: typeof data === 'string' ? enc.encode(data) : data,
+      etag: this.newEtag(),
+      mtime: Date.now(),
+      mime: 'application/octet-stream',
+      id: prev?.id ?? this.nextFileId++,
+    });
+    this.touch(user, path);
+  }
+
+  /** Test helper: renames or moves a file, keeping its file id. */
+  moveFile(from: string, to: string, user = Object.keys(this.users)[0]) {
+    const files = this.files.get(user)!;
+    const f = files.get(from);
+    if (!f) throw new Error(`no such file: ${from}`);
+    files.delete(from);
+    files.set(to, { ...f, etag: this.newEtag() });
+    this.touch(user, from);
+    this.touch(user, to);
   }
 }

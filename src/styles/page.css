@@ -418,3 +418,109 @@
   box-shadow: var(--shadow);
   font-variant-numeric: tabular-nums;
 }
+
+/* ------------------------------------------------------------------ PDF documents */
+
+.page-view.pdf-view {
+  background: var(--bg);
+}
+
+/* PDF pages are paper: they stay light in dark mode, and so does what is written on them */
+.page.pdf-doc {
+  background: transparent;
+  --page-bg: #ffffff;
+  --page-text: #1f1f1f;
+  --tc-border: #c8c6c4;
+  --tc-grip: #f1eff3;
+  --text-2: #5d5964;
+  --text-3: #8b8792;
+  --surface-3: #f1eef5;
+  --border-strong: #c8c3d0;
+  color-scheme: light;
+}
+
+[data-theme='dark'] .page.pdf-doc .nn-editor h1 {
+  color: #1e4e79;
+}
+
+[data-theme='dark'] .page.pdf-doc .nn-editor h2 {
+  color: #2e75b5;
+}
+
+[data-theme='dark'] .page.pdf-doc .nn-editor h3 {
+  color: #1f3763;
+}
+
+.pdf-page {
+  position: absolute;
+  z-index: 0;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.06),
+    0 1px 4px rgba(0, 0, 0, 0.14);
+  pointer-events: none;
+}
+
+[data-theme='dark'] .pdf-page {
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+.pdf-page canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pdf-error {
+  position: absolute;
+  z-index: 1;
+  max-width: 420px;
+  margin: 24px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #fdecee;
+  color: #8a1f30;
+  font: 13px var(--ui-font);
+}
+
+.pdf-unsaved {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 11;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  border-radius: 14px;
+  padding: 4px 11px 4px 9px;
+  font-size: 12px;
+  box-shadow: var(--shadow);
+}
+
+.pdf-unsaved:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.pdf-banner {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 11;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: var(--shadow);
+}

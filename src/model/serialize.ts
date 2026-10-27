@@ -31,6 +31,8 @@ export interface RemoteSection {
   createdAt: number;
   deletedAt: number | null;
   times: FieldTimes;
+  /** Set for a PDF section: its Nextcloud folder. */
+  pdfFolder: string | null;
 }
 
 export interface RemotePage {
@@ -75,6 +77,7 @@ export function sectionToRemote(s: Section): RemoteSection {
     createdAt: s.createdAt,
     deletedAt: s.deletedAt,
     times: s.times,
+    pdfFolder: s.pdfFolder ?? null,
   };
 }
 
@@ -153,10 +156,11 @@ export function parseSection(text: string): RemoteSection | null {
     createdAt: num(v.createdAt),
     deletedAt: typeof v.deletedAt === 'number' ? v.deletedAt : null,
     times: times(v.times),
+    pdfFolder: typeof v.pdfFolder === 'string' && v.pdfFolder ? v.pdfFolder : null,
   };
 }
 
-function validElement(e: unknown): e is PageElement {
+export function validElement(e: unknown): e is PageElement {
   if (!isObj(e) || typeof e.id !== 'string' || typeof e.updatedAt !== 'number') return false;
   if (e.type === 'text') return isObj(e.doc) && typeof e.x === 'number' && typeof e.y === 'number';
   if (e.type === 'ink') return Array.isArray(e.pts) && typeof e.color === 'string';

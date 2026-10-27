@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 import { db } from '../db/db';
-import { repo } from '../state/repo';
+import { pdfRepo, repo } from '../state/repo';
 import { useSettings } from '../state/settings';
+import { measured } from '../state/page';
+import { fontStack } from '../editor/extensions';
+import { PdfSync } from '../pdf/sync';
+import { isPdfDirty } from '../pdf/repo';
 import { platform } from '../platform';
 import { NetworkError } from '../platform/types';
 import { resetSyncState, SyncEngine, type SyncReport } from './engine';
@@ -52,6 +56,8 @@ class SyncManager {
   private afterSync = new Set<AfterSync>();
   private beforeSync = new Set<BeforeSync>();
   private failures = 0;
+  private pdfTimer: ReturnType<typeof setTimeout> | null = null;
+  private force = false;
 
   async init() {
     try {
@@ -65,7 +71,12 @@ class SyncManager {
       // ignore broken state
     }
     repo.onChange = () => this.requestSync(4000);
+    // a PDF is uploaded as a whole: only once the pen rested for a while (or the PDF was closed)
+    pdfRepo.onChange = (id) => this.schedulePdfUpload(pdfRepo.uploadDelay(id) + 1500);
     platform.onResume(() => this.requestSync(300));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') void this.uploadPdfsNow();
+    });
     window.addEventListener('online', () => this.requestSync(500));
     this.applyInterval();
     useSettings.subscribe((s, prev) => {
@@ -88,6 +99,30 @@ class SyncManager {
   onBeforeSync(cb: BeforeSync) {
     this.beforeSync.add(cb);
     return () => this.beforeSync.delete(cb);
+  }
+
+  /** A WebDAV client for the account's files, null when not connected. */
+  client(): WebDavClient | null {
+    const account = useSync.getState().account;
+    if (!account || !this.password) return null;
+    return new WebDavClient(platform.http, davBaseUrl(account), basicAuth(account.loginName, this.password), platform.deviceName);
+  }
+
+  /** Uploads annotated PDFs right away, also the one being edited (the app goes to the background). */
+  async uploadPdfsNow() {
+    // the last stroke may still wait for being saved locally
+    for (const cb of this.beforeSync) await cb();
+    const dirty = await db.pdfDocs.filter((d) => d.deletedAt !== null || (isPdfDirty(d) && !d.readOnly)).count();
+    if (dirty) await this.syncNow({ force: true });
+  }
+
+  private schedulePdfUpload(delayMs: number) {
+    if (!this.configured) return;
+    if (this.pdfTimer) clearTimeout(this.pdfTimer);
+    this.pdfTimer = setTimeout(() => {
+      this.pdfTimer = null;
+      void this.syncNow();
+    }, delayMs);
   }
 
   get configured() {
@@ -154,8 +189,10 @@ class SyncManager {
     }, delayMs);
   }
 
-  syncNow(): Promise<void> {
+  /** `force`: also upload PDFs that are being edited right now. */
+  syncNow(opts: { force?: boolean } = {}): Promise<void> {
     if (!this.configured) return Promise.resolve();
+    if (opts.force) this.force = true;
     if (this.running) {
       this.again = true;
       return this.running;
@@ -177,11 +214,26 @@ class SyncManager {
     useSync.setState({ status: 'syncing', progress: 'Synchronisiere …' });
     for (const cb of this.beforeSync) await cb();
     const client = new WebDavClient(platform.http, davBaseUrl(account), basicAuth(account.loginName, password), platform.deviceName);
-    const engine = new SyncEngine(db, client, account.rootFolder, {
-      onProgress: (msg) => useSync.setState({ progress: msg }),
-    });
+    const onProgress = (msg: string) => useSync.setState({ progress: msg });
+    const engine = new SyncEngine(db, client, account.rootFolder, { onProgress });
+    const force = this.force;
+    this.force = false;
     try {
       const report = await engine.sync();
+      const settings = useSettings.getState();
+      const pdf = await new PdfSync(pdfRepo, client, {
+        writeOptions: () => ({ fontSize: settings.defaultFontSize, fontFamily: fontStack(settings.defaultFont), measured }),
+        force,
+        onProgress,
+      }).sync();
+      report.uploaded += pdf.uploaded;
+      report.downloaded += pdf.downloaded;
+      report.deleted += pdf.deleted;
+      report.conflicts += pdf.conflicts;
+      report.errors.push(...pdf.errors);
+      for (const id of pdf.changedDocs) report.changedPages.add(id);
+      report.structureChanged ||= pdf.structureChanged;
+      if (pdf.retryInMs !== null) this.schedulePdfUpload(pdf.retryInMs);
       this.failures = 0;
       const ts = Date.now();
       localStorage.setItem('nextnote.lastSync', String(ts));

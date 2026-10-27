@@ -20,6 +20,8 @@ export interface DavEntry {
   etag: string | null;
   size: number;
   lastModified: number;
+  /** Nextcloud file id (stays the same when the file is renamed or moved). */
+  fileId?: string;
 }
 
 const PROPFIND_BODY =
@@ -148,6 +150,7 @@ export class WebDavClient {
       let isDir = false;
       let size = 0;
       let lastModified = 0;
+      let fileId: string | undefined;
       for (const ps of Array.from(r.getElementsByTagNameNS('DAV:', 'propstat'))) {
         const status = ps.getElementsByTagNameNS('DAV:', 'status')[0]?.textContent ?? '';
         if (!/\b200\b/.test(status)) continue;
@@ -159,9 +162,11 @@ export class WebDavClient {
         if (len?.textContent) size = Number(len.textContent) || 0;
         const lm = ps.getElementsByTagNameNS('DAV:', 'getlastmodified')[0];
         if (lm?.textContent) lastModified = Date.parse(lm.textContent) || 0;
+        const fid = ps.getElementsByTagNameNS('http://owncloud.org/ns', 'fileid')[0];
+        if (fid?.textContent) fileId = fid.textContent.trim();
       }
       const path = rel.join('/');
-      out.push({ path, name: rel.at(-1) ?? '', isDir, etag, size, lastModified });
+      out.push({ path, name: rel.at(-1) ?? '', isDir, etag, size, lastModified, fileId });
     }
     return out;
   }

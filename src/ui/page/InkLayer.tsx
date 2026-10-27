@@ -46,7 +46,9 @@ export const InkLayer = memo(function InkLayer({ width, height }: { width: numbe
   const elements = usePage((s) => s.elements);
   const selection = usePage((s) => s.selection);
   const drag = usePage((s) => s.drag);
-  const dark = useIsDark();
+  // PDF pages stay white: ink keeps its colour
+  const onPdf = usePage((s) => s.kind === 'pdf');
+  const dark = useIsDark() && !onPdf;
   const invert = useSettings((s) => s.invertInkInDark);
   const pressure = useSettings((s) => s.pressure);
 

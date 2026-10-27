@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BookOpen, ChevronDown, ChevronRight, FolderInput, GripVertical, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronRight, FileStack, FileText, FolderInput, GripVertical, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { db } from '../db/db';
 import { repo } from '../state/repo';
 import type { ID, Notebook, Section } from '../model/types';
@@ -8,7 +8,7 @@ import { useUI } from '../state/ui';
 import { syncManager } from '../sync/manager';
 import { isTouchDevice } from '../platform';
 import { openMenu, openMenuAt, type MenuItem } from './Dialogs';
-import { deleteNotebook, deleteSection, moveNotebookBefore, movePagesTo, moveSectionTo, newNotebook, newSection, renameNotebook, renameSection } from './actions';
+import { deleteNotebook, deleteSection, moveNotebookBefore, movePagesTo, moveSectionTo, newNotebook, newPdfSection, newSection, renameNotebook, renameSection } from './actions';
 import { beginDrag, dropClass, useDnd, type DragPayload, type DropTarget } from './dnd';
 import { openMoveDialog } from './MoveDialog';
 import { PaneFoot } from './PaneToggles';
@@ -64,9 +64,11 @@ function SectionRow({ section, active }: { section: Section; active: boolean }) 
         openMenu(e.clientX, e.clientY, items());
       }}
       onPointerDown={(e) => beginDrag(e, { kind: 'section', id: section.id, label: section.name }, (p, t) => void handleDrop(p, t))}
+      title={section.pdfFolder ? `PDF-Ordner in Nextcloud: ${section.pdfFolder}` : undefined}
     >
       <span className="section-tab" style={{ background: section.color }} />
       <span className="nav-label">{section.name}</span>
+      {section.pdfFolder && <FileStack size={14} className="section-kind" aria-label="PDF-Ordner" />}
       {isTouchDevice && (
         <span className="drag-handle" aria-hidden="true">
           <GripVertical size={15} />
@@ -102,6 +104,7 @@ function NotebookBlock({ nb }: { nb: Notebook }) {
   const toggle = () => useUI.setState((s) => ({ expanded: { ...s.expanded, [nb.id]: !expanded } }));
   const items = (): MenuItem[] => [
     { label: 'Neuer Abschnitt', icon: <Plus size={15} />, run: () => void newSection(nb.id) },
+    { label: 'PDF-Ordner aus Nextcloud …', icon: <FileStack size={15} />, run: () => void newPdfSection(nb.id) },
     { label: 'Umbenennen', icon: <Pencil size={15} />, run: () => void renameNotebook(nb.id) },
     { label: 'Jetzt synchronisieren', icon: <RefreshCw size={15} />, run: () => void syncManager.syncNow() },
     { label: `Papierkorb${trashCount ? ` (${trashCount})` : ''}`, icon: <Trash2 size={15} />, run: () => useUI.setState({ recycleBinFor: nb.id }) },
@@ -155,7 +158,16 @@ function NotebookBlock({ nb }: { nb: Notebook }) {
           {sections.map((s) => (
             <SectionRow key={s.id} section={s} active={s.id === activeSection} />
           ))}
-          <button type="button" className="nav-add" onClick={() => void newSection(nb.id)}>
+          <button
+            type="button"
+            className="nav-add"
+            onClick={(e) =>
+              openMenuAt(e.currentTarget, [
+                { label: 'Neuer Abschnitt', icon: <FileText size={15} />, run: () => void newSection(nb.id) },
+                { label: 'PDF-Ordner aus Nextcloud …', icon: <FileStack size={15} />, run: () => void newPdfSection(nb.id) },
+              ])
+            }
+          >
             <Plus size={14} /> Abschnitt hinzufügen
           </button>
           {!!trashCount && (
