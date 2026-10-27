@@ -196,7 +196,7 @@ export const TextContainer = memo(function TextContainer({ el, selected, drag, o
   return (
     <div
       ref={ref}
-      className={`text-container${selected ? ' selected' : ''}${el.w ? ' fixed-width' : ''}${el.conflictOf ? ' conflict' : ''}`}
+      className={`text-container${selected ? ' selected' : ''}${el.w ? ' fixed-width' : ''}${el.conflictOf ? ' conflict' : ''}${el.layout === 'onenote' ? ' onenote-layout' : ''}`}
       style={{ left: el.x, top: el.y, width: el.w ?? undefined, transform }}
       data-el={el.id}
     >

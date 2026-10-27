@@ -35,7 +35,12 @@ export interface ConvertedPage {
   images: PageImage[];
   attachments: number;
   videos: number;
+  /** Ink that Microsoft Graph leaves out (older handwriting, see INK_NOT_SUPPORTED). */
+  missingInk: number;
 }
+
+/** Graph puts this comment where it leaves out ink, e.g. handwriting from older OneNote versions. */
+const INK_NOT_SUPPORTED = /<!--\s*InkNode is not supported\s*-->/g;
 
 /** Measures the rendered height of normalized outline content at the given content width. */
 export type MeasureFn = (el: HTMLElement, width: number | null) => number;
@@ -380,9 +385,28 @@ function rename(el: Element, tag: string): Element {
 
 function normalize(root: Element, base: TextStyle) {
   const doc = root.ownerDocument;
+  // Graph returns runs of <br /> where OneNote shows a single empty line (measured on real pages)
+  for (const br of Array.from(root.querySelectorAll('br'))) {
+    const parent = br.parentElement;
+    if (parent !== root && parent?.localName !== 'ul' && parent?.localName !== 'ol') continue;
+    let prev = br.previousSibling;
+    while (prev?.nodeType === 3 && !prev.textContent?.trim()) prev = prev.previousSibling;
+    if (prev?.nodeType === 1 && (prev as Element).localName === 'br') br.remove();
+  }
   // a <br> between paragraphs is an empty line in OneNote
   for (const child of Array.from(root.childNodes)) {
     if (child.nodeType === 1 && (child as Element).localName === 'br') child.replaceWith(doc.createElement('p'));
+  }
+  // an empty line in a list (a <br> between the items) belongs to the item above it and has no bullet
+  for (const br of Array.from(root.querySelectorAll('ul > br, ol > br'))) {
+    const prev = br.previousElementSibling;
+    if (prev?.localName === 'li') {
+      firstParagraph(doc, prev);
+      prev.appendChild(doc.createElement('p'));
+    } else {
+      br.parentElement!.before(doc.createElement('p'));
+    }
+    br.remove();
   }
   for (const el of Array.from(root.querySelectorAll('[id], [data-id], [lang]'))) {
     el.removeAttribute('id');
@@ -444,6 +468,21 @@ function dropEmptyTextStyles(node: JSONContent): JSONContent {
   return node;
 }
 
+const isEmptyParagraph = (node: JSONContent) => node.type === 'paragraph' && !node.content?.some((c) => c.type !== 'hardBreak');
+
+/**
+ * Drops empty lines at the end of the text, also those of the last list item. They only make the
+ * container reach into what follows on the page; the layout keeps their height.
+ */
+function dropTrailingEmptyLines(node: JSONContent): JSONContent {
+  const content = node.content;
+  if (!content) return node;
+  while (content.length > 1 && isEmptyParagraph(content[content.length - 1])) content.pop();
+  const last = content[content.length - 1];
+  if (/^(bulletList|orderedList|taskList|listItem|taskItem)$/.test(last?.type ?? '')) dropTrailingEmptyLines(last);
+  return node;
+}
+
 /** Rough height estimate (when no DOM measurement is available, e.g. in tests). */
 export function estimateHeight(root: Element, width: number | null): number {
   const w = Math.max(80, width ?? 600);
@@ -457,7 +496,7 @@ export function estimateHeight(root: Element, width: number | null): number {
     const fontPx = (pt * 4) / 3;
     const perLine = Math.max(8, avail / (fontPx * 0.5));
     const lines = Math.max(1, Math.ceil((el.textContent ?? '').length / perLine));
-    return lines * fontPx * 1.35 + (/^h[1-3]$/.test(tag) ? 4 : 0);
+    return lines * fontPx * 1.227 + (/^h[1-3]$/.test(tag) ? 4 : 0);
   };
   let h = 0;
   const visit = (el: Element, avail: number) => {
@@ -470,7 +509,7 @@ export function estimateHeight(root: Element, width: number | null): number {
           h += Math.max(20, ...cells.map((c) => blockHeight(c, cw - 12) + 6));
         }
       } else if (tag === 'ul' || tag === 'ol') {
-        visit(child, avail - 24);
+        visit(child, avail - 36);
       } else if (tag === 'li' && child.querySelector('p, ul, ol')) {
         visit(child, avail);
       } else {
@@ -510,7 +549,14 @@ function imageOf(img: Element, x: number, y: number): PageImage | null {
 
 export function convertPageHtml(html: string, opts: { measure?: MeasureFn } = {}): ConvertedPage {
   const doc = new DOMParser().parseFromString(html, 'text/html');
-  const result: ConvertedPage = { title: doc.querySelector('title')?.textContent?.trim() ?? '', texts: [], images: [], attachments: 0, videos: 0 };
+  const result: ConvertedPage = {
+    title: doc.querySelector('title')?.textContent?.trim() ?? '',
+    texts: [],
+    images: [],
+    attachments: 0,
+    videos: 0,
+    missingInk: html.match(INK_NOT_SUPPORTED)?.length ?? 0,
+  };
   const body = doc.body;
   if (!body) return result;
   const bodyStyle = readStyle(body);
@@ -523,7 +569,7 @@ export function convertPageHtml(html: string, opts: { measure?: MeasureFn } = {}
     normalize(box, base);
     const measured = opts.measure?.(box, width) ?? 0;
     const height = measured > 0 ? measured : estimateHeight(box, width);
-    const json = dropEmptyTextStyles(parser.parse(box).toJSON() as JSONContent);
+    const json = dropTrailingEmptyLines(dropEmptyTextStyles(parser.parse(box).toJSON() as JSONContent));
     if (!isDocEmpty(json)) {
       result.texts.push({ x: Math.round(x - PAD_X), y: Math.round(y - PAD_Y), w: width ? Math.round(width + 2 * PAD_X) : null, doc: json });
     }

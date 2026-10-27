@@ -28,9 +28,12 @@ type Step =
 /** Real height of imported outline content, laid out like a text container. */
 function measureOutline(el: HTMLElement, width: number | null): number {
   const host = document.createElement('div');
-  host.className = 'nn-editor import-measure';
+  host.className = 'import-measure onenote-layout';
   host.style.width = width ? `${width}px` : 'max-content';
-  host.appendChild(el.cloneNode(true));
+  const editor = document.createElement('div');
+  editor.className = 'nn-editor';
+  editor.appendChild(el.cloneNode(true));
+  host.appendChild(editor);
   document.body.appendChild(host);
   try {
     return Math.ceil(host.getBoundingClientRect().height);
@@ -91,6 +94,18 @@ function Summary({ summary }: { summary: ImportSummary }) {
           {w}
         </p>
       ))}
+      {summary.missingInkPages.length > 0 && (
+        <>
+          <p className="hint">
+            Auf diesen Seiten fehlt ältere Handschrift, die Microsoft nicht herausgibt. Abhilfe: In OneNote für Windows die Handschrift mit der Lassoauswahl markieren,
+            Rechtsklick → „Ausgewähltes Freihandelement behandeln als“ → „Zeichnung“, dann das Notizbuch erneut importieren.
+          </p>
+          <pre className="error-box warn-box">
+            {summary.missingInkPages.slice(0, 20).join('\n')}
+            {summary.missingInkPages.length > 20 ? `\n… und ${summary.missingInkPages.length - 20} weitere` : ''}
+          </pre>
+        </>
+      )}
       {summary.failedPages.length > 0 && (
         <>
           <p className="hint">Diese Seiten konnten nicht importiert werden:</p>

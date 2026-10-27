@@ -41,6 +41,8 @@ export interface ImportSummary {
   videos: number;
   failedImages: number;
   failedPages: Array<{ title: string; error: string }>;
+  /** Pages with handwriting that Microsoft does not hand out (older ink, see README). */
+  missingInkPages: string[];
   cancelled: boolean;
   /** Set when the import stopped early because of an error. */
   error: string | null;
@@ -117,6 +119,7 @@ export async function importFromOneNote(opts: ImportOptions): Promise<ImportSumm
     videos: 0,
     failedImages: 0,
     failedPages: [],
+    missingInkPages: [],
     cancelled: false,
     error: null,
   };
@@ -146,7 +149,7 @@ export async function importFromOneNote(opts: ImportOptions): Promise<ImportSumm
     return null;
   };
 
-  const importPage = async (page: GraphPage, notebookId: ID, sectionId: ID) => {
+  const importPage = async (page: GraphPage, notebookId: ID, sectionId: ID, path: string) => {
     const content = await graph.pageContent(page.id);
     const converted = convertPageHtml(content.html, { measure: opts.measure });
     const strokes: InkStroke[] = [];
@@ -164,7 +167,7 @@ export async function importFromOneNote(opts: ImportOptions): Promise<ImportSumm
         summary.failedImages++;
       }
     }
-    for (const t of converted.texts) elements.push({ id: newId(), type: 'text', x: t.x, y: t.y, w: t.w, doc: t.doc, z: z++, updatedAt: ts });
+    for (const t of converted.texts) elements.push({ id: newId(), type: 'text', x: t.x, y: t.y, w: t.w, doc: t.doc, layout: 'onenote', z: z++, updatedAt: ts });
     for (const s of strokes) {
       elements.push({
         id: newId(),
@@ -181,6 +184,7 @@ export async function importFromOneNote(opts: ImportOptions): Promise<ImportSumm
     summary.strokes += strokes.length;
     summary.attachments += converted.attachments;
     summary.videos += converted.videos;
+    if (converted.missingInk) summary.missingInkPages.push(path);
     const createdAt = Date.parse(page.createdDateTime ?? '') || ts;
     const updatedAt = Date.parse(page.lastModifiedDateTime ?? '') || createdAt;
     await repo.addPage(sectionId, { title: page.title ?? converted.title, level: page.level ?? 0, createdAt, updatedAt, elements: moveIntoView(elements) });
@@ -222,7 +226,7 @@ export async function importFromOneNote(opts: ImportOptions): Promise<ImportSumm
           const title = page.title?.trim() || 'Ohne Titel';
           progress({ notebook: notebook.name, section: sec.name, page: title, done, total });
           try {
-            await importPage(page, notebook.id, sec.id);
+            await importPage(page, notebook.id, sec.id, `${nb.displayName} › ${sec.name} › ${title}`);
             summary.pages++;
           } catch (e) {
             if (e instanceof CancelledError || e instanceof MsAuthError) throw e;

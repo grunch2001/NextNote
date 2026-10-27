@@ -103,9 +103,6 @@ function pageContentOf(res: HttpResponse): PageContent {
 }
 
 export class GraphClient {
-  /** v1.0 left out the ink of a page once, so page content is read from the beta endpoint. */
-  private inkFromBeta = false;
-
   constructor(
     private http: HttpFn,
     private auth: TokenSource,
@@ -202,17 +199,12 @@ export class GraphClient {
     return pages.sort((a, b) => (a.createdDateTime ?? '').localeCompare(b.createdDateTime ?? ''));
   }
 
-  /** Page HTML plus its ink as InkML. */
+  /**
+   * Page HTML plus its ink as InkML. Ink that Graph cannot hand out (older handwriting) is missing
+   * here, in v1.0 and beta alike; the HTML marks it with "InkNode is not supported" comments.
+   */
   async pageContent(pageId: string): Promise<PageContent> {
-    const path = `/me/onenote/pages/${enc(pageId)}/content?includeInkML=true`;
-    const beta = /\/v1\.0$/.test(this.base) ? this.base.replace(/\/v1\.0$/, '/beta') : null;
-    if (this.inkFromBeta && beta) return pageContentOf(await this.get(beta + path, null));
-    const content = pageContentOf(await this.get(path, null));
-    if (content.inkml.length || !beta || !content.html.includes('InkNode is not supported')) return content;
-    const fromBeta = pageContentOf(await this.get(beta + path, null));
-    if (!fromBeta.inkml.length) return content;
-    this.inkFromBeta = true;
-    return fromBeta;
+    return pageContentOf(await this.get(`/me/onenote/pages/${enc(pageId)}/content?includeInkML=true`, null));
   }
 
   async resource(url: string): Promise<{ data: Uint8Array; mime: string | null }> {

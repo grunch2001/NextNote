@@ -15,6 +15,8 @@ export interface MockPage {
   lastModifiedDateTime?: string;
   html: string;
   inkml?: string;
+  /** Ink that Graph leaves out (older handwriting): the HTML gets this many "InkNode is not supported" comments. */
+  unsupportedInk?: number;
 }
 
 export interface MockSection {
@@ -49,8 +51,6 @@ export class MockOneNote {
   notebooks: MockNotebook[] = [];
   resources = new Map<string, { data: Uint8Array; mime: string }>();
   requestLog: Array<{ method: string; url: string; status: number }> = [];
-  /** v1.0 answers without ink (like the real service sometimes does); beta delivers it. */
-  inkOnlyInBeta = false;
   /** Number of upcoming Graph requests to answer with 429. */
   throttle = 0;
   /** Page size for page listings (to exercise @odata.nextLink). */
@@ -189,15 +189,11 @@ export class MockOneNote {
         .flatMap((x) => x.s.pages)
         .find((p) => p.id === m![1]);
       if (!page) return this.json({ error: { code: '20102', message: 'not found' } }, 404);
-      const wantInk = url.searchParams.get('includeInkML') === 'true';
-      const inkAvailable = page.inkml && wantInk && !(this.inkOnlyInBeta && version === 'v1.0');
-      if (!inkAvailable) {
-        const html = page.inkml ? page.html.replace('</body>', '<!-- InkNode is not supported --></body>') : page.html;
-        return this.res(200, html, { 'content-type': 'text/html' });
-      }
+      const html = page.html.replace('</body>', '<!-- InkNode is not supported -->'.repeat(page.unsupportedInk ?? 0) + '</body>');
+      if (!page.inkml || url.searchParams.get('includeInkML') !== 'true') return this.res(200, html, { 'content-type': 'text/html' });
       const boundary = `onenote-${++this.counter}`;
       const body =
-        `--${boundary}\r\nContent-Type: text/html\r\n\r\n${page.html.replace('</body>', '<!-- InkNode is not supported --></body>')}\r\n` +
+        `--${boundary}\r\nContent-Type: text/html\r\n\r\n${html}\r\n` +
         `--${boundary}\r\nContent-Type: application/inkml+xml\r\n\r\n${page.inkml}\r\n--${boundary}--\r\n`;
       return this.res(200, body, { 'content-type': `multipart/related; boundary=${boundary}` });
     }

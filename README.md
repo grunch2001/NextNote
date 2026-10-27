@@ -149,6 +149,8 @@ API-Berechtigungen musst du nicht eintragen: Bei der Anmeldung im Browser fragt 
 
 **Was fehlt:** Dateianhänge (auf der Seite steht ein Hinweis mit dem Dateinamen), Audio, eingebettete Videos (werden zum Link), Seitenfarbe und -linien; Formeln kommen höchstens als einfacher Text an. Die Reihenfolge der Abschnitte gibt Microsoft nicht heraus; sie werden nach Erstelldatum sortiert und lassen sich per Ziehen umordnen. Microsoft drosselt die Abfragen, deshalb dauern große Notizbücher eine Weile. Ein Abbruch ist jederzeit möglich; bereits importierte Seiten bleiben erhalten.
 
+**Handschrift fehlt auf älteren Seiten:** OneNote speichert Handschrift entweder als Zeichnung oder als Schrift. Handschrift, die als Schrift gespeichert ist, gibt Microsoft über die Schnittstelle nicht heraus. Das betrifft vor allem ältere Seiten, zum Beispiel aus OneNote für Windows 10. Dort kommen nach dem Import zwar Linien und Formen an, die handgeschriebenen Wörter fehlen aber. Welche Seiten betroffen sind, zeigt die Zusammenfassung am Ende des Imports. Abhilfe schaffst du im Desktop-OneNote unter Windows: Umrande auf der Seite im Reiter **Zeichnen** mit der **Lassoauswahl** die ganze Handschrift. Dann Rechtsklick → **Ausgewähltes Freihandelement behandeln als** → **Zeichnung**. Am Aussehen der Seite ändert sich dadurch nichts. Danach importierst du das Notizbuch erneut. Lösche vorher die erste Kopie in NextNote, sonst entsteht ein zweites Notizbuch „… (OneNote)“.
+
 ## Bedienung
 
 | Aktion | So geht's |
@@ -262,7 +264,7 @@ Beide Dateien sind per `.gitignore` vom Repository ausgeschlossen. Bewahre sie s
 ## Grenzen der Version 1.2
 
 - Keine Handschrifterkennung (Umwandlung in Text)
-- OneNote-Import nur unter Windows und nur für Notizbücher in OneDrive; `.one`-Dateien lassen sich nicht direkt öffnen
+- OneNote-Import nur unter Windows und nur für Notizbücher in OneDrive; `.one`-Dateien lassen sich nicht direkt öffnen. Ältere Handschrift muss in OneNote eventuell erst als Zeichnung markiert werden (siehe [Von OneNote umziehen](#von-onenote-umziehen))
 - Keine Audioaufnahmen und keine Dateianhänge außer Bildern und PDF-Ausdrucken
 - PDFs aus Nextcloud-Ordnern: Text in PDFs wird von der Suche nicht gefunden. Getippter Text erscheint in anderen PDF-Programmen in einer Standardschrift und vereinfacht (z. B. Tabellen); in NextNote bleibt er unverändert. Anmerkungen anderer Programme werden angezeigt, lassen sich in NextNote aber nicht bearbeiten. PDFs, die zum Öffnen ein Passwort brauchen, werden nicht unterstützt; PDFs, die nur gegen Änderungen geschützt sind, werden beim Speichern ohne diesen Schutz gespeichert
 - Oberfläche nur auf Deutsch

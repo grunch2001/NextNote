@@ -159,6 +159,22 @@
   max-width: 680px;
 }
 
+/* Text imported from OneNote keeps OneNote's line spacing (18 px at 11 pt) and list indents (36 px per
+   level), so handwriting written next to the text stays on its lines. Also used to measure it on import. */
+.onenote-layout {
+  line-height: 1.227;
+}
+
+.onenote-layout .nn-editor,
+.onenote-layout .nn-editor p {
+  min-height: 1.227em;
+}
+
+.onenote-layout .nn-editor ul:not([data-type='taskList']),
+.onenote-layout .nn-editor ol {
+  padding-left: 36px;
+}
+
 .text-container:hover,
 .text-container:focus-within {
   border-color: var(--tc-border);

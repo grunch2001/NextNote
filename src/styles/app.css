@@ -1188,6 +1188,11 @@ button:disabled {
   overflow: auto;
 }
 
+.error-box.warn-box {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--text);
+}
+
 .segmented {
   display: flex;
   border: 1px solid var(--border-strong);
@@ -1646,7 +1651,6 @@ button:disabled {
   max-width: 1200px;
   font-family: var(--default-font);
   font-size: var(--default-size);
-  line-height: 1.35;
 }
 
 .welcome-import {

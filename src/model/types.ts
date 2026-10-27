@@ -131,6 +131,8 @@ export interface TextElement extends ElementBase {
   doc: JSONContent;
   /** Set on a copy that was kept because of a sync conflict. */
   conflictOf?: ID;
+  /** 'onenote': imported text keeps OneNote's line spacing and list indents, so ink next to it stays on its lines. */
+  layout?: 'onenote';
 }
 
 /** axes1: first quadrant, axes2: positive x with positive and negative y, axes4: all four quadrants. */

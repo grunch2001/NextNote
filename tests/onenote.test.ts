@@ -187,6 +187,33 @@ describe('OneNote page HTML', () => {
     expect(page.texts).toEqual([]);
     expect(page.images).toEqual([expect.objectContaining({ x: 500, y: 300, w: 200, h: 100, fallbackSrc: null })]);
   });
+
+  it('keeps empty lines in lists without a bullet and drops empty lines at the end', () => {
+    // structure as Graph returns it: <br /> between list items, runs of <br /> and trailing ones
+    const html = `<html><body><!-- InkNode is not supported --><div style="position:absolute;left:48px;top:113px;width:600px">
+      <ul>
+        <li>Eins</li>
+        <br />
+        <li><p>Zwei</p><ul><li style="list-style-type:circle">Zwei a</li><br /><br /></ul></li>
+      </ul>
+      <br /><br /><br />
+      <p>Drei</p>
+      <ul><li>Drei a</li><br /><br /></ul>
+      <br /><br />
+    </div><!-- InkNode is not supported --></body></html>`;
+    const page = convertPageHtml(html);
+    expect(page.missingInk).toBe(2);
+    const doc = page.texts[0].doc;
+    const items = findAll(doc, (n) => n.type === 'listItem');
+    // no item for the empty lines, they are empty paragraphs of the item above; a run of them is one line
+    expect(items.map((i) => docToText(i.content![0]))).toEqual(['Eins', 'Zwei', 'Zwei a', 'Drei a']);
+    expect(items[0].content!.map((n) => n.type)).toEqual(['paragraph', 'paragraph']);
+    expect(items[2].content!.map((n) => n.type)).toEqual(['paragraph', 'paragraph']);
+    expect(doc.content!.map((n) => n.type)).toEqual(['bulletList', 'paragraph', 'paragraph', 'bulletList']);
+    expect(doc.content![1].content).toBeUndefined();
+    // the last item and the container end with text
+    expect(items[3].content!.map((n) => n.type)).toEqual(['paragraph']);
+  });
 });
 
 describe('Graph client', () => {
@@ -232,6 +259,7 @@ function demoNotebook(mock: MockOneNote) {
               level: 1,
               createdDateTime: '2021-05-04T08:30:00Z',
               inkml: INKML,
+              unsupportedInk: 2,
               html: `<html><head><title>Grenzwerte</title></head><body><img style="position:absolute;left:100px;top:300px" width="320" height="200" src="${img}" data-src-type="image/png" /><img style="position:absolute;left:100px;top:600px" width="10" height="10" src="https://graph.microsoft.com/v1.0/me/onenote/resources/missing/$value" /></body></html>`,
             }),
             page('p3', 'Integrale', { order: 2, level: 0 }),
@@ -267,7 +295,6 @@ describe('OneNote import', () => {
     const mock = new MockOneNote();
     demoNotebook(mock);
     mock.pageSize = 2; // exercise @odata.nextLink
-    mock.inkOnlyInBeta = true;
     mock.throttle = 1;
     const auth = await session(mock);
     expect(auth.account).toBe('Erika Mustermann');
@@ -278,6 +305,7 @@ describe('OneNote import', () => {
     const progress: number[] = [];
     const summary = await importFromOneNote({ graph, repo: dev.repo, notebooks, onProgress: (p) => progress.push(p.done) });
     expect(summary).toMatchObject({ sections: 2, pages: 4, images: 1, failedImages: 1, strokes: 2, cancelled: false, error: null, failedPages: [] });
+    expect(summary.missingInkPages).toEqual(['Uni › Mathe › Grenzwerte']);
 
     const [nb] = await dev.repo.listNotebooks();
     expect(nb.name).toBe('Uni');
@@ -301,7 +329,6 @@ describe('OneNote import', () => {
     expect(ink[0]).toMatchObject({ color: '#0000FF', pts: [96, 192, 0.5, 192, 192, 1] });
     expect(ink[0].sim).toBeUndefined();
     expect(Math.min(...ink.map((s) => s.z))).toBeGreaterThan(images[0].z);
-    expect(mock.requestLog.some((r) => r.url.includes('/beta/me/onenote/pages/p2/content'))).toBe(true);
     const asset = await dev.repo.getAsset(images[0].asset);
     expect(new Uint8Array(asset!.data)).toEqual(new Uint8Array([137, 80, 78, 71]));
 
