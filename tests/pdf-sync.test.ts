@@ -226,6 +226,43 @@ describe('PDF folders', () => {
     expect(await serverIds(server, 'Uni/Mathe/Übungen/Blatt 1.pdf')).toHaveLength(1);
   });
 
+  it('loads nothing for a section in the trash', async () => {
+    const { server, a, section } = await setup();
+    await a.syncAll();
+    const [skript] = await a.pdfRepo.listDocs(section.id);
+    await a.pdfRepo.want(skript.id);
+    await a.repo.trashSection(section.id);
+    server.requestLog = [];
+    await a.syncAll();
+    expect(server.requestLog.filter((r) => r.method === 'GET')).toEqual([]);
+    expect(await a.db.pdfFiles.count()).toBe(0);
+  });
+
+  it('does not load a PDF by itself again when the app died while loading it', async () => {
+    const { server, a, section } = await setup();
+    await a.syncAll();
+    const [skript] = await a.pdfRepo.listDocs(section.id);
+    await a.pdfRepo.want(skript.id);
+    // what a sync leaves behind when the app is killed during the download
+    await a.db.setKV('pdfLoading', skript.id);
+    server.requestLog = [];
+    const r = await a.pdfSync();
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toContain('Skript');
+    expect(server.requestLog.filter((x) => x.method === 'GET')).toEqual([]);
+    expect((await a.pdfRepo.getDoc(skript.id))?.loadFailed).toBe(true);
+    // opening it again (also when the app starts with it) does not load it either
+    await a.pdfRepo.want(skript.id);
+    await a.syncAll();
+    expect(await a.db.pdfFiles.count()).toBe(0);
+
+    await a.pdfRepo.retryLoad(skript.id);
+    const r2 = await a.syncAll();
+    expect(r2.downloaded).toBe(1);
+    expect((await a.pdfRepo.getDoc(skript.id))?.loadFailed).toBe(false);
+    expect(await a.db.getKV('pdfLoading')).toBeUndefined();
+  });
+
   it('only checks the folder when nothing changed', async () => {
     const { server, a } = await setup();
     await a.syncAll();

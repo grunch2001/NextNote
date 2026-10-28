@@ -50,6 +50,9 @@ function encodePath(path: string): string {
     .join('/');
 }
 
+/** Time limit for a whole transfer, enough for large files on a slow line (about 2 Mbit/s). */
+const transferTimeout = (bytes: number, min: number) => Math.max(min, 60_000 + bytes / 250);
+
 function safeDecode(s: string): string {
   try {
     return decodeURIComponent(s);
@@ -181,8 +184,9 @@ export class WebDavClient {
     return { self, children };
   }
 
-  async get(path: string): Promise<{ data: Uint8Array; etag: string | null } | null> {
-    const res = await this.request('GET', path, { timeoutMs: 120000 });
+  /** `size`: the expected size, if known (large files get more time). */
+  async get(path: string, size = 0): Promise<{ data: Uint8Array; etag: string | null } | null> {
+    const res = await this.request('GET', path, { timeoutMs: transferTimeout(size, 120000) });
     if (res.status === 404) return null;
     if (res.status !== 200) this.fail(res, `Datei laden (${path})`);
     return { data: res.body, etag: normalizeEtag(res.headers['oc-etag'] ?? res.headers['etag']) };
@@ -200,7 +204,7 @@ export class WebDavClient {
     const headers: Record<string, string> = { 'Content-Type': opts.contentType ?? 'application/octet-stream' };
     if (opts.ifMatch) headers['If-Match'] = `"${opts.ifMatch}"`;
     if (opts.ifNoneMatch) headers['If-None-Match'] = '*';
-    const res = await this.request('PUT', path, { headers, body: data, timeoutMs: 180000 });
+    const res = await this.request('PUT', path, { headers, body: data, timeoutMs: transferTimeout(data.length, 180000) });
     if (res.status === 412) return 'precondition';
     if (res.status !== 200 && res.status !== 201 && res.status !== 204) this.fail(res, `Datei speichern (${path})`);
     let etag = normalizeEtag(res.headers['oc-etag'] ?? res.headers['etag']);

@@ -86,6 +86,12 @@ export class PdfRepo {
     this.onWanted?.(id);
   }
 
+  /** Tries again to load a PDF whose loading was interrupted (see PdfDoc.loadFailed). */
+  async retryLoad(id: ID): Promise<void> {
+    await this.db.pdfDocs.update(id, { offline: true, loadFailed: false });
+    this.onWanted?.(id);
+  }
+
   async getBody(id: ID): Promise<PageBody> {
     return (await this.db.pdfBodies.get(id)) ?? emptyBody(id);
   }

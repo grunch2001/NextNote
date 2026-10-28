@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
-import { repo } from '../../state/repo';
+import { pdfRepo, repo } from '../../state/repo';
 import { CanvasController } from '../../ink/controller';
 import { elementBounds, elementsOrigin, translateElement, unionRect } from '../../ink/geometry';
 import { ClipboardPaste, CloudUpload, SquareDashedMousePointer, Type } from 'lucide-react';
@@ -101,6 +101,18 @@ function PdfLoading({ doc }: { doc: PdfDoc }) {
   const status = useSync((s) => s.status);
   const progress = useSync((s) => s.progress);
   const connected = useSync((s) => !!s.account);
+  if (doc.loadFailed) {
+    return (
+      <div className="page-view empty">
+        <div className="page-empty-hint">
+          <p>Die PDF wurde nicht fertig geladen, weil die App dabei beendet wurde.</p>
+          <button type="button" className="btn" onClick={() => void pdfRepo.retryLoad(doc.id)}>
+            Erneut laden
+          </button>
+        </div>
+      </div>
+    );
+  }
   let text = 'Die PDF wird aus Nextcloud geladen …';
   if (doc.readOnly) text = doc.readOnly;
   else if (!connected) text = 'Diese PDF ist noch nicht auf diesem Gerät. Verbinde NextNote mit Nextcloud, um sie zu laden.';

@@ -8,7 +8,10 @@ import { readAnnotatedPdf, writeAnnotatedPdf, type ReadResult, type WriteOptions
 import { relayout, sameLayout } from './layout';
 import { isPdfDirty, isPdfName, pdfTitle, uniquePath, type PdfRepo } from './repo';
 
-const isWanted = (d: PdfDoc) => d.offline !== false;
+const isWanted = (d: PdfDoc) => d.offline !== false && !d.loadFailed;
+
+/** The PDF being downloaded right now; still set at the next start if the app died meanwhile. */
+const LOADING_KEY = 'pdfLoading';
 
 /**
  * Keeps the PDF sections in step with their Nextcloud folders: every PDF of the folder (and its
@@ -55,6 +58,7 @@ export class PdfSync {
 
   async sync(): Promise<PdfSyncReport> {
     this.report = { uploaded: 0, downloaded: 0, deleted: 0, conflicts: 0, errors: [], changedDocs: new Set(), structureChanged: false, retryInMs: null };
+    await this.checkInterruptedLoad();
     const all = (await this.db.sections.toArray()).filter((x) => x.pdfFolder);
     // notebooks closed on this device are not synced
     const closed = new Set((await this.db.notebooks.toArray()).filter((n) => n.closedAt).map((n) => n.id));
@@ -77,6 +81,19 @@ export class PdfSync {
     return this.report;
   }
 
+  /** A PDF whose loading killed the app would kill it at every start again: it waits until it is asked for. */
+  private async checkInterruptedLoad() {
+    const id = await this.db.getKV<ID>(LOADING_KEY);
+    if (!id) return;
+    await this.db.setKV(LOADING_KEY, null);
+    const doc = await this.db.pdfDocs.get(id);
+    if (!doc || (await this.db.pdfFiles.where('id').equals(id).count()) > 0) return;
+    await this.db.pdfDocs.update(id, { loadFailed: true });
+    this.report.errors.push(`„${pdfTitle(doc.path)}“ wurde nicht fertig geladen, weil die App dabei beendet wurde. In der PDF lässt sich das Laden erneut starten.`);
+    this.report.changedDocs.add(id);
+    this.report.structureChanged = true;
+  }
+
   private progress(msg: string) {
     this.opts.onProgress?.(msg);
   }
@@ -88,9 +105,10 @@ export class PdfSync {
     // PDFs are only on the device once they were opened here
     const wanted = locals.filter(isWanted);
     const missingFiles = wanted.length - (await db.pdfFiles.where('id').anyOf(wanted.map((d) => d.id)).count());
-    const pending = locals.some((d) => isPdfDirty(d) || d.deletedAt !== null) || missingFiles > 0;
-    // trashed sections: only bring what was written here to the server
-    if (section.deletedAt !== null && !pending) return;
+    const written = locals.some((d) => isPdfDirty(d) || d.deletedAt !== null);
+    // trashed sections: only bring what was written here to the server, load nothing
+    if (section.deletedAt !== null && !written) return;
+    const pending = written || missingFiles > 0;
     const key = `pdfRoot:${section.id}`;
     const rootInfo = await client.propfind(folder, 0);
     if (!rootInfo) {
@@ -140,12 +158,19 @@ export class PdfSync {
           }
           continue;
         }
+        if (section.deletedAt !== null && !isPdfDirty(local)) continue;
         const hasFile = (await db.pdfFiles.where('id').equals(local.id).count()) > 0;
         if (!hasFile || !entry.etag || entry.etag !== local.etag) {
           this.progress(`„${pdfTitle(path)}“ wird geladen …`);
-          const file = await client.get(joinPath(folder, path));
+          await db.setKV(LOADING_KEY, local.id);
+          let file: Awaited<ReturnType<WebDavClient['get']>>;
+          try {
+            file = await client.get(joinPath(folder, path), entry.size);
+            if (file) local = await this.applyRemote(local, file.data, file.etag ?? entry.etag, entry);
+          } finally {
+            await db.setKV(LOADING_KEY, null);
+          }
           if (!file) continue;
-          local = await this.applyRemote(local, file.data, file.etag ?? entry.etag, entry);
         }
         if (isPdfDirty(local)) touched = (await this.maybeUpload(local, folder)) || touched;
       } catch (e) {
@@ -322,7 +347,7 @@ export class PdfSync {
           this.report.structureChanged = true;
           continue;
         }
-        const fresh = await client.get(path);
+        const fresh = await client.get(path, doc.size);
         if (!fresh) {
           await db.pdfDocs.update(id, { etag: null, fileId: null });
           continue;

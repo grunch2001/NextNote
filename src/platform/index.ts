@@ -49,9 +49,18 @@ interface NativeHttpPlugin {
     url: string;
     headers: Record<string, string>;
     bodyBase64?: string;
+    bodyFile?: string;
     timeoutMs?: number;
-  }): Promise<{ status: number; headers: Record<string, string>; bodyBase64: string }>;
+  }): Promise<{ status: number; headers: Record<string, string>; bodyBase64?: string; bodyFile?: string }>;
+  append(opts: { file?: string; bodyBase64: string }): Promise<{ file: string }>;
+  release(opts: { file: string }): Promise<void>;
 }
+
+/**
+ * Larger bodies do not cross the bridge as one base64 string (an 86 MB PDF ran the app out of
+ * memory): they go through a file, see NativeHttpPlugin.java (INLINE_MAX there as well).
+ */
+const INLINE_MAX = 2 * 1024 * 1024;
 
 const toBytes = (body: Uint8Array | string | undefined) => (body === undefined ? undefined : typeof body === 'string' ? encodeUtf8(body) : body);
 
@@ -94,17 +103,27 @@ function androidPlatform(): Platform {
     deviceName: 'NextNote (Android)',
     async http(req: HttpRequest): Promise<HttpResponse> {
       const body = toBytes(req.body);
+      let bodyFile: string | undefined;
       try {
+        if (body && body.length > INLINE_MAX) {
+          for (let i = 0; i < body.length; i += INLINE_MAX) {
+            bodyFile = (await NativeHttp.append({ file: bodyFile, bodyBase64: bytesToBase64(body.subarray(i, i + INLINE_MAX)) })).file;
+          }
+        }
         const res = await NativeHttp.request({
           method: req.method,
           url: req.url,
           headers: req.headers ?? {},
-          bodyBase64: body ? bytesToBase64(body) : undefined,
+          bodyBase64: body && !bodyFile ? bytesToBase64(body) : undefined,
+          bodyFile,
           timeoutMs: req.timeoutMs,
         });
-        return { status: res.status, headers: lowerHeaders(res.headers ?? {}), body: base64ToBytes(res.bodyBase64 ?? '') };
+        const data = res.bodyFile ? await readTransferFile(NativeHttp, res.bodyFile) : base64ToBytes(res.bodyBase64 ?? '');
+        return { status: res.status, headers: lowerHeaders(res.headers ?? {}), body: data };
       } catch (e) {
         throw new NetworkError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (bodyFile) NativeHttp.release({ file: bodyFile }).catch(() => {});
       }
     },
     async openExternal(url) {
@@ -177,6 +196,17 @@ function androidPlatform(): Platform {
       NativePen.setButtonErases({ enabled }).catch(() => {});
     },
   };
+}
+
+/** A response body the native side wrote to a file, read through Capacitor's local server. */
+async function readTransferFile(plugin: NativeHttpPlugin, file: string): Promise<Uint8Array> {
+  try {
+    const res = await fetch(Capacitor.convertFileSrc(file));
+    if (!res.ok) throw new Error(`Antwort konnte nicht gelesen werden (${res.status})`);
+    return new Uint8Array(await res.arrayBuffer());
+  } finally {
+    plugin.release({ file }).catch(() => {});
+  }
 }
 
 function webPlatform(): Platform {

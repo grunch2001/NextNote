@@ -78,6 +78,8 @@ export interface PdfDoc {
   baseId: string | null;
   /** Keep the file on this device (false: only in Nextcloud, loaded when opened). Missing means true. */
   offline?: boolean;
+  /** The app was closed while this file was being loaded (e.g. out of memory): it is loaded again only on request. */
+  loadFailed?: boolean;
 }
 
 export type RuleStyle = 'none' | 'lines' | 'lines-wide' | 'grid' | 'dots';
