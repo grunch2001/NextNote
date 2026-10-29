@@ -71,10 +71,10 @@ const HANDOFF_MAX_MS = 1000;
 const NATIVE_SYNC_MS = 100;
 /**
  * A highlighter stroke is semi-transparent: shown by the native layer and the page at once it looks
- * darker, shown by neither it flickers. The layer drops it this many frames after the page has it
- * (measured on a Galaxy Tab S10 Lite: 0 leaves a one-frame gap, 2 one darker frame).
+ * darker, shown by neither it flickers. The layer starts fading it out this many frames after the
+ * page has it: rather a little darker than a little lighter (measured on a Galaxy Tab S10 Lite).
  */
-const MARKER_HANDOFF_FRAMES = 1;
+const MARKER_HANDOFF_FRAMES = 2;
 
 const isTextTarget = (t: Element) => !!t.closest('.text-container .ProseMirror, input, textarea, select, [contenteditable="true"]');
 const isOwnPointer = (t: Element) => !!t.closest('[data-own-pointer], button, a[href]');

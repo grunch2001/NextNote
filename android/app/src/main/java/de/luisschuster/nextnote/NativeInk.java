@@ -15,6 +15,7 @@ import android.graphics.RenderNode;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Choreographer;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -81,6 +82,8 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
     private static final long CLEAR_DELAY_MS = 150;
     /** A finished stroke the page never confirms (or rejects) is dropped after this. */
     private static final long STALE_MS = 3000;
+    /** A finished highlighter fades out over this time once the page shows it, see fadeOut(). */
+    private static final long MARKER_FADE_MS = 120;
     /** Distance (CSS px) within which the page's pointer position names a stroke start. */
     private static final float MATCH_CSS = 2;
     private static final int SIDE_BUTTON = MotionEvent.BUTTON_STYLUS_PRIMARY | MotionEvent.BUTTON_SECONDARY;
@@ -102,6 +105,8 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
     /** Increases whenever the layer is cleared; older frames are not drawn. */
     private int generation;
     private boolean hasContent;
+    /** Highlighters fading out; the layer is not cleared meanwhile. */
+    private int fading;
     private final Runnable clearRunnable = this::clearIfIdle;
 
     // ------------------------------------------------------------------ render thread state
@@ -150,6 +155,8 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
         boolean visible;
         volatile boolean removed;
         volatile int latestFrame;
+        /** Opacity factor while a highlighter fades out. */
+        volatile float fade = 1;
 
         // render thread: what is drawn of the stroke
         double[] drawnPts;
@@ -190,6 +197,8 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
         static final int REMOVE = 2;
         /** The layer was cleared (or just created); this frame only makes it visible. */
         static final int CLEAR = 3;
+        /** A highlighter fading out: redraw it with its current opacity. */
+        static final int FADE = 4;
 
         final int type;
         final Stroke stroke;
@@ -281,11 +290,47 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
             Stroke s = pending.get(i);
             if (s.seq != strokeSeq) continue;
             pending.remove(i);
-            // a highlighter shown twice looks darker: it goes at once, pen strokes with the next clear
-            if (s.highlighter) remove(s);
+            // a highlighter shown twice looks darker: it fades out now, pen strokes go with the next clear
+            if (s.highlighter) fadeOut(s);
             scheduleClear();
             return;
         }
+    }
+
+    /**
+     * Fades a highlighter out instead of removing it at once. When the page's copy reaches the screen
+     * is not known exactly (it shifts when the display switches between 60 and 90 Hz while writing):
+     * both copies at once look darker, neither looks like a flicker. Fading turns either into a soft,
+     * barely visible change.
+     */
+    private void fadeOut(Stroke s) {
+        if (!s.visible) return;
+        int gen = generation;
+        fading++;
+        Choreographer.getInstance().postFrameCallback(
+            new Choreographer.FrameCallback() {
+                long start = -1;
+
+                @Override
+                public void doFrame(long frameTimeNanos) {
+                    if (generation != gen || s.removed) {
+                        fading--;
+                        return;
+                    }
+                    if (start < 0) start = frameTimeNanos;
+                    float f = 1 - (frameTimeNanos - start) / (MARKER_FADE_MS * 1e6f);
+                    if (f <= 0) {
+                        fading--;
+                        remove(s);
+                        scheduleClear();
+                        return;
+                    }
+                    s.fade = f;
+                    renderer.renderFrontBufferedLayer(new Frame(Frame.FADE, s, ++frameNo, generation));
+                    Choreographer.getInstance().postFrameCallback(this);
+                }
+            }
+        );
     }
 
     /** Removes everything at once (the page scrolled, zoomed or changed). */
@@ -320,11 +365,11 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
 
     private void scheduleClear() {
         handler.removeCallbacks(clearRunnable);
-        if (live == null && pending.isEmpty() && hasContent) handler.postDelayed(clearRunnable, CLEAR_DELAY_MS);
+        if (live == null && pending.isEmpty() && fading == 0 && hasContent) handler.postDelayed(clearRunnable, CLEAR_DELAY_MS);
     }
 
     private void clearIfIdle() {
-        if (live == null && pending.isEmpty()) clear();
+        if (live == null && pending.isEmpty() && fading == 0) clear();
     }
 
     // ------------------------------------------------------------------ input (UI thread)
@@ -465,6 +510,10 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
         if (f.type == Frame.CLEAR) return;
         ensureOffscreen(width, height);
         Stroke s = f.stroke;
+        if (f.type == Frame.FADE) {
+            if (scene.contains(s)) redraw(canvas, s.bounds);
+            return;
+        }
         if (f.type == Frame.REMOVE) {
             scene.remove(s);
             if (renderLive == s) renderLive = null;
@@ -580,6 +629,7 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
             py = y;
         }
         markerPaint.setColor(s.color);
+        markerPaint.setAlpha(Math.round(Color.alpha(s.color) * s.fade));
         markerPaint.setStrokeWidth((float) (r * 2));
         canvas.drawPath(path, markerPaint);
     }
