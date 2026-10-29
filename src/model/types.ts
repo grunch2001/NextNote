@@ -147,8 +147,10 @@ export interface InkElement extends ElementBase {
   size: number;
   /** Flat list of x, y, pressure triples in page coordinates. */
   pts: number[];
-  /** Pressure was simulated (mouse/finger): render with uniform width. */
+  /** Written without pressure (mouse, finger, or the pressure setting off): even width. */
   sim?: boolean;
+  /** Pen stroke drawn point by point without smoothing (since 1.3, see ink/direct.ts); older ones use perfect-freehand. */
+  direct?: boolean;
   /** Geometric shape instead of freehand stroke. */
   shape?: ShapeKind;
 }

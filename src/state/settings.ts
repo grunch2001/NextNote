@@ -3,8 +3,6 @@ import { persist } from 'zustand/middleware';
 import { platform } from '../platform';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
-/** How far ahead of the pen the live stroke is drawn (browser prediction). */
-export type InkPrediction = 'off' | 'moderate' | 'full';
 
 export interface Settings {
   theme: ThemeMode;
@@ -16,9 +14,8 @@ export interface Settings {
   drawWithFinger: boolean;
   /** Holding the S Pen side button erases. */
   penButtonErases: boolean;
-  /** Use stylus pressure for the line width. */
+  /** The width of new strokes follows the stylus pressure (off: even width, like Samsung Notes' pen). */
   pressure: boolean;
-  inkPrediction: InkPrediction;
   /** Show dark ink as light in dark mode. */
   invertInkInDark: boolean;
   defaultFont: string;
@@ -34,13 +31,24 @@ export const useSettings = create<Settings>()(
       penAlwaysDraws: platform.kind === 'android',
       drawWithFinger: false,
       penButtonErases: true,
-      pressure: true,
-      inkPrediction: 'moderate',
+      pressure: false,
       invertInkInDark: true,
       defaultFont: 'Calibri',
       defaultFontSize: 11,
       set: (key, value) => set({ [key]: value } as Partial<Settings>),
     }),
-    { name: 'nextnote.settings', version: 1 },
+    {
+      name: 'nextnote.settings',
+      version: 3,
+      migrate: (state, version) => {
+        const s = state as Partial<Settings> & { inkPrediction?: string };
+        if (version < 3) {
+          // 1.3: new strokes have an even width by default, the prediction setting is gone
+          s.pressure = false;
+          delete s.inkPrediction;
+        }
+        return s as Settings;
+      },
+    },
   ),
 );

@@ -1,8 +1,8 @@
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
 import { base64ToBytes, bytesToBase64, encodeUtf8 } from '../model/util';
-import { NetworkError, type ClipboardContent, type HttpRequest, type HttpResponse, type OAuthResult, type Platform } from './types';
+import { NetworkError, type ClipboardContent, type HttpRequest, type HttpResponse, type NativeInkConfig, type NativeStroke, type OAuthResult, type Platform } from './types';
 
 /** API exposed by electron/preload.ts */
 export interface ElectronBridge {
@@ -35,6 +35,15 @@ interface NativeClipboardPlugin {
 
 interface NativePenPlugin {
   setButtonErases(opts: { enabled: boolean }): Promise<void>;
+}
+
+interface NativeInkPlugin {
+  info(): Promise<{ available: boolean }>;
+  configure(cfg: NativeInkConfig): Promise<void>;
+  reject(opts: { x: number; y: number }): Promise<void>;
+  shown(opts: { seq: number }): Promise<void>;
+  clear(): Promise<void>;
+  addListener(event: 'stroke', cb: (stroke: NativeStroke) => void): Promise<PluginListenerHandle>;
 }
 
 interface NativeSecureStoragePlugin {
@@ -98,6 +107,7 @@ function androidPlatform(): Platform {
   const NativeClipboard = registerPlugin<NativeClipboardPlugin>('NativeClipboard');
   const NativeSecureStorage = registerPlugin<NativeSecureStoragePlugin>('NativeSecureStorage');
   const NativePen = registerPlugin<NativePenPlugin>('NativePen');
+  const NativeInk = registerPlugin<NativeInkPlugin>('NativeInk');
   return {
     kind: 'android',
     deviceName: 'NextNote (Android)',
@@ -194,6 +204,14 @@ function androidPlatform(): Platform {
     },
     setPenButtonErases(enabled) {
       NativePen.setButtonErases({ enabled }).catch(() => {});
+    },
+    nativeInk: {
+      available: () => NativeInk.info().then((r) => r.available, () => false),
+      configure: (cfg) => void NativeInk.configure(cfg).catch(() => {}),
+      reject: (x, y) => void NativeInk.reject({ x, y }).catch(() => {}),
+      shown: (seq) => void NativeInk.shown({ seq }).catch(() => {}),
+      clear: () => void NativeInk.clear().catch(() => {}),
+      onStroke: (cb) => void NativeInk.addListener('stroke', cb),
     },
   };
 }

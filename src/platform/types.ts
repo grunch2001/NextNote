@@ -55,6 +55,45 @@ export interface Platform {
   clipboardChangedSince?(time: number): Promise<boolean | null>;
   /** Android: strokes with the stylus side button held arrive as the eraser end of the pen. */
   setPenButtonErases?(enabled: boolean): void;
+  /** Android 10+: a native low-latency layer draws the live pen stroke (see src/ink/nativeInk.ts). */
+  nativeInk?: NativeInkBridge;
+}
+
+export interface NativeInkConfig {
+  /** The pen draws: pen tool, or the select tool with "pen always draws". */
+  enabled: boolean;
+  /** Select tool: a short tap is a click, so a stroke shows only once it moves. */
+  auto: boolean;
+  /** Ink colour as displayed. */
+  color: string;
+  /** Pen size (page units) and width per pressure, see ink/direct.ts. */
+  size: number;
+  widthBase: number;
+  widthPressure: number;
+  uniform: boolean;
+  zoom: number;
+  dpr: number;
+  /** Client rectangle (CSS px: left, top, right, bottom) in which the pen draws. */
+  rect: number[];
+  /** Client rectangles in which the pen does not draw (buttons, grips, fields). */
+  exclude: number[][];
+}
+
+export interface NativeStroke {
+  seq: number;
+  /** x, y (client CSS px), pressure triples; the first point is where the pen touched down. */
+  pts: number[];
+}
+
+export interface NativeInkBridge {
+  available(): Promise<boolean>;
+  configure(cfg: NativeInkConfig): void;
+  /** The pen contact that started at (x, y) is not a stroke: remove it from the layer. */
+  reject(x: number, y: number): void;
+  /** The page shows the stroke now. */
+  shown(seq: number): void;
+  clear(): void;
+  onStroke(cb: (stroke: NativeStroke) => void): void;
 }
 
 export interface OAuthResult {

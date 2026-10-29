@@ -1,8 +1,9 @@
 import { getStroke } from 'perfect-freehand';
 import type { InkElement } from '../model/types';
+import { DIRECT_TOLERANCE, directPath, directShapes } from './direct';
 import { axesPolylines } from './geometry';
 
-/** Fill outline of a freehand pen stroke (pressure sensitive). */
+/** Fill outline of a freehand pen stroke from before 1.3 (pressure sensitive, smoothed). */
 export function freehandOutline(pts: number[], size: number, opts: { uniform: boolean; last: boolean }): number[][] {
   const input: number[][] = [];
   for (let i = 0; i + 2 < pts.length + 1; i += 3) input.push([pts[i], pts[i + 1], pts[i + 2] ?? 0.5]);
@@ -97,22 +98,18 @@ function shapePath(el: InkElement): string {
   }
 }
 
-const cache = new WeakMap<InkElement, Map<string, InkGeometry>>();
+const cache = new WeakMap<InkElement, InkGeometry>();
 
-export function inkGeometry(el: InkElement, pressure: boolean, last = true): InkGeometry {
-  const key = `${pressure ? 1 : 0}${last ? 1 : 0}`;
-  let m = cache.get(el);
-  const hit = m?.get(key);
+/** Geometry of a stroke; whether its width follows the pressure was decided when it was written (sim). */
+export function inkGeometry(el: InkElement): InkGeometry {
+  const hit = cache.get(el);
   if (hit) return hit;
   let geo: InkGeometry;
   if (el.shape) geo = { d: shapePath(el), mode: 'stroke' };
   else if (el.tool === 'highlighter') geo = { d: polylinePath(el.pts), mode: 'stroke' };
-  else geo = { d: outlineToPath(freehandOutline(el.pts, el.size, { uniform: !!el.sim || !pressure, last })), mode: 'fill' };
-  if (!m) {
-    m = new Map();
-    cache.set(el, m);
-  }
-  m.set(key, geo);
+  else if (el.direct) geo = { d: directPath(directShapes(el.pts, el.size, !!el.sim, DIRECT_TOLERANCE)), mode: 'fill' };
+  else geo = { d: outlineToPath(freehandOutline(el.pts, el.size, { uniform: !!el.sim, last: true })), mode: 'fill' };
+  cache.set(el, geo);
   return geo;
 }
 

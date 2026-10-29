@@ -1,5 +1,6 @@
 import type { ID, InkElement, PageElement } from '../model/types';
 import { newId, now } from '../model/util';
+import { directRadius } from './direct';
 
 export interface Rect {
   x: number;
@@ -105,7 +106,7 @@ export function strokeBounds(el: InkElement): Rect {
     if (s[i + 1] < minY) minY = s[i + 1];
     if (s[i + 1] > maxY) maxY = s[i + 1];
   }
-  const pad = el.size / 2 + (el.shape === 'arrow' ? el.size * 4 : 0);
+  const pad = (el.direct ? directRadius(el.size, 1, !!el.sim) : el.size / 2) + (el.shape === 'arrow' ? el.size * 4 : 0);
   if (!Number.isFinite(minX)) return { x: 0, y: 0, w: 0, h: 0 };
   return { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
 }

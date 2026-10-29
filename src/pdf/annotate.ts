@@ -4,6 +4,7 @@ import { validElement } from '../model/serialize';
 import { docToText, paragraphDoc } from '../model/text';
 import { decodeUtf8, encodeUtf8 } from '../model/util';
 import { axesPolylines, elementBounds, strokeRuns } from '../ink/geometry';
+import { DIRECT_TOLERANCE, directShapes } from '../ink/direct';
 import { freehandOutline, HIGHLIGHTER_OPACITY } from '../ink/render';
 import {
   applyMatrix,
@@ -432,6 +433,16 @@ function inkOps(el: InkElement): { ops: string; alpha: number } {
     return { ops: `${strokeStyle}\n${path} S`, alpha: 1 };
   }
   if (el.tool === 'highlighter') return { ops: `${strokeStyle}\n${polylineOps(el.pts, 3)} S`, alpha: HIGHLIGHTER_OPACITY };
+  if (el.direct) {
+    const { discs, quads } = directShapes(el.pts, el.size, !!el.sim, DIRECT_TOLERANCE);
+    const parts: string[] = [];
+    for (let i = 0; i < discs.length; i += 3) parts.push(ellipseOps(discs[i], discs[i + 1], discs[i + 2], discs[i + 2]));
+    // ellipseOps runs the other way round than the quads: reversed, all shapes add up under the nonzero rule
+    for (let i = 0; i < quads.length; i += 8) {
+      parts.push(`${num(quads[i + 6])} ${num(quads[i + 7])} m ${num(quads[i + 4])} ${num(quads[i + 5])} l ${num(quads[i + 2])} ${num(quads[i + 3])} l ${num(quads[i])} ${num(quads[i + 1])} l h`);
+    }
+    return { ops: `${rgbOps(color, false)}\n${parts.join(' ')} f`, alpha: 1 };
+  }
   const outline = freehandOutline(el.pts, el.size, { uniform: !!el.sim, last: true });
   if (outline.length < 4) {
     const r = el.size / 2;

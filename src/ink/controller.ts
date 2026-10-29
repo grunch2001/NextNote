@@ -2,11 +2,14 @@ import { flushSync } from 'react-dom';
 import { editorsById, getActiveEditor, setLastInputKind } from '../editor/active';
 import type { ID, InkElement, PageElement, ShapeKind } from '../model/types';
 import { newId, now } from '../model/util';
+import { platform } from '../platform';
 import { measured, pageActions, usePage } from '../state/page';
 import { useSettings } from '../state/settings';
 import { INK_TOOLS, useUI, type Tool } from '../state/ui';
 import { eraseFromStroke, elementsInLasso, elementsInRect, strokeHit, topmostStrokeAt } from './geometry';
-import { displayInkColor, freehandOutline, HIGHLIGHTER_OPACITY, inkGeometry, outlineToPath, polylinePath } from './render';
+import { DIRECT_WIDTH, directPath, directShapes } from './direct';
+import { nativeInk } from './nativeInk';
+import { displayInkColor, HIGHLIGHTER_OPACITY, inkGeometry, polylinePath } from './render';
 
 export interface ControllerDeps {
   scroller: HTMLDivElement;
@@ -28,6 +31,8 @@ type DrawGesture = {
   pts: number[];
   predicted: number[];
   tapAsClick: boolean;
+  /** The native layer on Android draws the live stroke (see nativeInk.ts). */
+  native: boolean;
   sx: number;
   sy: number;
   t0: number;
@@ -62,6 +67,8 @@ const PREDICT_MS = 12;
 const PREDICT_MAX = 4;
 /** Never wait longer than this for the SVG version of a finished stroke. */
 const HANDOFF_MAX_MS = 1000;
+/** The pen hovering over the app refreshes what the native ink layer knows about the page, at most this often. */
+const NATIVE_SYNC_MS = 100;
 
 const isTextTarget = (t: Element) => !!t.closest('.text-container .ProseMirror, input, textarea, select, [contenteditable="true"]');
 const isOwnPointer = (t: Element) => !!t.closest('[data-own-pointer], button, a[href]');
@@ -86,6 +93,12 @@ export class CanvasController {
   private ctx: CanvasRenderingContext2D;
   /** Finished strokes that stay on the canvas until their SVG version is in the page. */
   private handoff: { el: InkElement; t0: number }[] = [];
+  /** The same for strokes on the native ink layer. */
+  private nativeHandoff: { id: ID; seq: number; t0: number }[] = [];
+  private lastNativeSync = -1e9;
+  private nativeSyncRaf = 0;
+  private unsubscribe: (() => void)[] = [];
+  private destroyed = false;
 
   constructor(private d: ControllerDeps) {
     // not desynchronized: the canvas has to change in the same frame as the page, or finished strokes flicker
@@ -100,9 +113,14 @@ export class CanvasController {
     s.addEventListener('click', this.onClickCapture, { capture: true });
     s.addEventListener('mousedown', this.onMouseDownCapture, { capture: true });
     s.addEventListener('contextmenu', this.onContextMenu);
+    s.addEventListener('scroll', this.onScroll, { passive: true });
+    window.addEventListener('pointermove', this.onWindowPointerMove, { capture: true, passive: true });
+    this.unsubscribe.push(useUI.subscribe(this.requestNativeSync), useSettings.subscribe(this.requestNativeSync), nativeInk.onAvailable(this.requestNativeSync));
+    this.requestNativeSync();
   }
 
   destroy() {
+    this.destroyed = true;
     const s = this.d.scroller;
     s.removeEventListener('pointerdown', this.onDown, { capture: true });
     s.removeEventListener('pointermove', this.onMove);
@@ -113,8 +131,15 @@ export class CanvasController {
     s.removeEventListener('click', this.onClickCapture, { capture: true });
     s.removeEventListener('mousedown', this.onMouseDownCapture, { capture: true });
     s.removeEventListener('contextmenu', this.onContextMenu);
+    s.removeEventListener('scroll', this.onScroll);
+    window.removeEventListener('pointermove', this.onWindowPointerMove, { capture: true });
+    this.unsubscribe.forEach((u) => u());
+    nativeInk.disable();
+    nativeInk.clearIfShowing();
+    for (const h of this.nativeHandoff) nativeInk.shown(h.seq);
     cancelAnimationFrame(this.inertiaRaf);
     cancelAnimationFrame(this.renderRaf);
+    cancelAnimationFrame(this.nativeSyncRaf);
     this.cancelLongPress();
   }
 
@@ -146,9 +171,73 @@ export class CanvasController {
     if (a && a !== document.body && this.d.scroller.contains(a)) a.blur();
   }
 
+  // ------------------------------------------------------------------ native ink layer (Android)
+
+  /** Syncs once the page shows the change (an opened dialog, the new zoom). */
+  private requestNativeSync = () => {
+    if (!this.nativeSyncRaf) this.nativeSyncRaf = requestAnimationFrame(this.syncNative);
+  };
+
+  /** Tells the native ink layer where and how the pen draws right now. */
+  private syncNative = () => {
+    cancelAnimationFrame(this.nativeSyncRaf);
+    this.nativeSyncRaf = 0;
+    if (!nativeInk.available || this.destroyed) return;
+    this.lastNativeSync = performance.now();
+    const ui = useUI.getState();
+    const st = useSettings.getState();
+    const auto = ui.tool === 'select' && st.penAlwaysDraws;
+    const pen = ui.pens[ui.penIndex];
+    const box = (r: DOMRect) => [r.left, r.top, r.right, r.bottom];
+    const area = this.d.scroller.getBoundingClientRect();
+    const exclude: number[][] = [];
+    const skip = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      if (r.width && r.height && r.right > area.left && r.left < area.right && r.bottom > area.top && r.top < area.bottom) exclude.push(box(r));
+    };
+    // where onDown leaves the pen to the element (or, with the select tool, to text)
+    this.d.scroller.querySelectorAll('[data-own-pointer], button, a[href]').forEach(skip);
+    if (auto) this.d.scroller.querySelectorAll('.ProseMirror-focused, input, textarea, select').forEach(skip);
+    // anything above the page (zoom badge, PDF status) gets the pointer, not the page
+    this.d.scroller.parentElement?.querySelectorAll(':scope > :not(.page-scroller, canvas)').forEach(skip);
+    document.querySelectorAll('.toasts > *').forEach(skip);
+    nativeInk.configure({
+      enabled: (ui.tool === 'pen' || auto) && !document.querySelector('.dialog-backdrop, .popover'),
+      auto,
+      color: displayInkColor(pen.color, this.d.isDark(), st.invertInkInDark),
+      size: pen.size,
+      widthBase: DIRECT_WIDTH.base,
+      widthPressure: DIRECT_WIDTH.pressure,
+      uniform: !st.pressure,
+      zoom: this.zoom,
+      dpr: window.devicePixelRatio || 1,
+      rect: box(area),
+      exclude,
+    });
+  };
+
+  /** The pen hovers before it touches: a good moment to bring the layer up to date (menus, fields, theme). */
+  private onWindowPointerMove = (e: PointerEvent) => {
+    if (e.pointerType === 'pen' && !this.gesture && performance.now() - this.lastNativeSync > NATIVE_SYNC_MS) this.syncNative();
+  };
+
+  private onScroll = () => {
+    // strokes on the native layer would stay where they are
+    nativeInk.clearIfShowing();
+  };
+
   // ------------------------------------------------------------------ pointer down
 
   private onDown = (e: PointerEvent) => {
+    this.down(e);
+    // the native layer started drawing at once; tell it if this contact is not a stroke after all
+    if (e.pointerType === 'pen' && nativeInk.drawsAt(e.clientX, e.clientY)) {
+      const g = this.gesture;
+      if (!(g?.kind === 'draw' && g.native && g.pointerId === e.pointerId)) nativeInk.reject(e.clientX, e.clientY);
+    }
+  };
+
+  private down(e: PointerEvent) {
     const isPen = e.pointerType === 'pen';
     const isTouch = e.pointerType === 'touch';
     if (isPen) {
@@ -222,7 +311,7 @@ export class CanvasController {
         this.selectDown(e, target);
         return;
     }
-  };
+  }
 
   private capture(e: PointerEvent) {
     try {
@@ -285,6 +374,8 @@ export class CanvasController {
     const st = useSettings.getState();
     const preset = tool === 'pen' ? ui.pens[ui.penIndex] : ui.highlighters[ui.highlighterIndex];
     const p = this.toPage(e.clientX, e.clientY);
+    const native = tool === 'pen' && e.pointerType === 'pen' && nativeInk.drawsAt(e.clientX, e.clientY);
+    if (native) nativeInk.started();
     this.gesture = {
       kind: 'draw',
       pointerId: e.pointerId,
@@ -295,6 +386,7 @@ export class CanvasController {
       pts: [p.x, p.y, this.pressureOf(e)],
       predicted: [],
       tapAsClick,
+      native,
       sx: e.clientX,
       sy: e.clientY,
       t0: e.timeStamp,
@@ -372,6 +464,7 @@ export class CanvasController {
           g.pts.push(p.x, p.y, this.pressureOf(ev));
         }
         g.moved = Math.max(g.moved, Math.hypot(e.clientX - g.sx, e.clientY - g.sy));
+        if (g.native) return; // the points are only a fallback
         g.predicted = this.prediction(e, events[events.length - 1], g);
         this.scheduleRender();
         return;
@@ -435,18 +528,13 @@ export class CanvasController {
     }
   };
 
-  /** Predicted continuation of the live stroke (hides input latency), see the inkPrediction setting. */
+  /**
+   * Predicted continuation of the live stroke (hides input latency). Not on Android: the pen draws
+   * on the fast native layer there, and a predicted tip visibly moves while writing.
+   */
   private prediction(e: PointerEvent, last: PointerEvent, g: DrawGesture): number[] {
-    const mode = useSettings.getState().inkPrediction;
-    const list = mode === 'off' ? [] : (e.getPredictedEvents?.() ?? []);
+    const list = platform.kind === 'android' ? [] : (e.getPredictedEvents?.() ?? []);
     const out: number[] = [];
-    if (mode === 'full') {
-      for (const ev of list) {
-        const p = this.toPage(ev.clientX, ev.clientY);
-        out.push(p.x, p.y, this.pressureOf(ev));
-      }
-      return out;
-    }
     const n = g.pts.length;
     if (!list.length || n < 6) return out;
     // direction of the last few page units of the stroke
@@ -544,24 +632,70 @@ export class CanvasController {
     let extent = 0;
     for (let i = 3; i < g.pts.length; i += 3) extent = Math.max(extent, Math.hypot(g.pts[i] - g.pts[0], g.pts[i + 1] - g.pts[1]) * this.zoom);
     if (g.tapAsClick && moved < 6 && extent < 6 && e.timeStamp - g.t0 < 450) {
+      if (g.native) nativeInk.reject(g.sx, g.sy);
       this.clearCanvas();
       this.clickAt(e.clientX, e.clientY);
       return;
     }
+    if (g.native) {
+      void this.finishNativeDraw(g, e);
+      return;
+    }
+    this.addStroke(g, this.withEnd(g, e));
+  }
+
+  /** The stroke from the points the native layer drew (the page's own points if they do not come). */
+  private async finishNativeDraw(g: DrawGesture, e: PointerEvent) {
+    const pageId = usePage.getState().pageId;
+    // the page does not move while the pen is down, nor in the moment until the points arrive
+    const r = this.d.page.getBoundingClientRect();
+    const z = this.zoom;
+    const own = this.withEnd(g, e);
+    const stroke = await nativeInk.take(g.sx, g.sy);
+    if (usePage.getState().pageId !== pageId) {
+      if (stroke) nativeInk.shown(stroke.seq);
+      return;
+    }
+    if (!stroke) {
+      this.addStroke(g, own);
+      return;
+    }
+    const pts: number[] = [];
+    for (let i = 0; i < stroke.pts.length; i += 3) pts.push((stroke.pts[i] - r.left) / z, (stroke.pts[i + 1] - r.top) / z, stroke.pts[i + 2]);
+    const el = this.addStroke(g, pts, false);
+    if (this.destroyed) {
+      nativeInk.shown(stroke.seq);
+      return;
+    }
+    this.nativeHandoff.push({ id: el.id, seq: stroke.seq, t0: performance.now() });
+    this.scheduleRender();
+  }
+
+  /** The points of the stroke up to where the pen lifted. */
+  private withEnd(g: DrawGesture, e: PointerEvent): number[] {
     const end = this.toPage(e.clientX, e.clientY);
     const n = g.pts.length;
-    if (Math.hypot(end.x - g.pts[n - 3], end.y - g.pts[n - 2]) * this.zoom > 1) g.pts.push(end.x, end.y, g.pts[n - 1]);
-    // a stroke that leaves the page (e.g. into the page list) runs along its edge instead
-    const r1 = (v: number) => Math.round(Math.max(0, v) * 10) / 10;
+    if (Math.hypot(end.x - g.pts[n - 3], end.y - g.pts[n - 2]) * this.zoom > 1) return g.pts.concat(end.x, end.y, g.pts[n - 1]);
+    return g.pts;
+  }
+
+  private addStroke(g: DrawGesture, raw: number[], handOff = true): InkElement {
+    const direct = g.tool === 'pen';
+    // a stroke that leaves the page (e.g. into the page list) runs along its edge instead;
+    // a direct stroke is not smoothed, so it keeps finer positions
+    const scale = direct ? 100 : 10;
+    const round = (v: number) => Math.round(Math.max(0, v) * scale) / scale;
     const pts: number[] = [];
-    for (let i = 0; i < g.pts.length; i += 3) pts.push(r1(g.pts[i]), r1(g.pts[i + 1]), g.pts[i + 2]);
+    for (let i = 0; i < raw.length; i += 3) pts.push(round(raw[i]), round(raw[i + 1]), raw[i + 2]);
     if (pts.length === 3) pts.push(pts[0] + 0.1, pts[1] + 0.1, pts[2]);
     const ts = now();
     const el: InkElement = { id: newId(), type: 'ink', tool: g.tool, color: g.color, size: g.size, pts, z: ts, updatedAt: ts };
     if (g.sim) el.sim = true;
+    if (direct) el.direct = true;
     pageActions.add([el]);
     setLastInputKind('page');
-    this.handOff(el);
+    if (handOff) this.handOff(el);
+    return el;
   }
 
   /** Keeps a finished stroke on the canvas, in its final shape, until the SVG layer shows it. */
@@ -623,6 +757,7 @@ export class CanvasController {
     if (g.kind === 'erase') pageActions.endBatch();
     if (g.kind === 'move') pageActions.setDrag(null);
     if (g.kind === 'draw' && g.pts.length > 6) this.finishDraw({ ...g, tapAsClick: false }, e);
+    else if (g.kind === 'draw' && g.native) nativeInk.reject(g.sx, g.sy);
     this.scheduleRender();
   };
 
@@ -854,6 +989,7 @@ export class CanvasController {
     const ctx = this.ctx;
     this.clearCanvas();
     const g = this.gesture;
+    this.nativePendingHandoff();
     const finished = this.pendingHandoff();
     const showHover = !g && this.hover && useUI.getState().tool === 'eraser';
     if (!g && !showHover && !finished.length) return;
@@ -866,8 +1002,7 @@ export class CanvasController {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (finished.length) {
-      const pressure = useSettings.getState().pressure;
-      for (const el of finished) this.drawFinished(el, dark, invert, pressure);
+      for (const el of finished) this.drawFinished(el, dark, invert);
       this.scheduleRender(); // until the SVG layer shows them
     }
     if (showHover && this.hover) {
@@ -877,6 +1012,7 @@ export class CanvasController {
     if (!g) return;
     switch (g.kind) {
       case 'draw': {
+        if (g.native) break;
         const pts = g.predicted.length ? g.pts.concat(g.predicted) : g.pts;
         const color = displayInkColor(g.color, dark, invert);
         if (g.tool === 'highlighter') {
@@ -887,7 +1023,7 @@ export class CanvasController {
           ctx.globalAlpha = 1;
         } else {
           ctx.fillStyle = color;
-          ctx.fill(new Path2D(outlineToPath(freehandOutline(pts, g.size, { uniform: g.sim, last: false }))));
+          ctx.fill(new Path2D(directPath(directShapes(pts, g.size, g.sim))));
         }
         break;
       }
@@ -903,7 +1039,7 @@ export class CanvasController {
           z: 0,
           updatedAt: 0,
         };
-        this.drawFinished(el, dark, invert, false);
+        this.drawFinished(el, dark, invert);
         break;
       }
       case 'erase':
@@ -951,10 +1087,23 @@ export class CanvasController {
     return this.handoff.map((h) => h.el);
   }
 
+  /** Tells the native layer which of its strokes the page shows now (it then clears them). */
+  private nativePendingHandoff() {
+    if (!this.nativeHandoff.length) return;
+    const t = performance.now();
+    const { elements } = usePage.getState();
+    this.nativeHandoff = this.nativeHandoff.filter((h) => {
+      const done = !elements[h.id] || t - h.t0 > HANDOFF_MAX_MS || !!this.d.page.querySelector(`.ink-layer [data-id="${h.id}"]`);
+      if (done) nativeInk.shown(h.seq);
+      return !done;
+    });
+    if (this.nativeHandoff.length) this.scheduleRender();
+  }
+
   /** Draws a stroke exactly like the SVG layer (InkLayer) does. */
-  private drawFinished(el: InkElement, dark: boolean, invert: boolean, pressure: boolean) {
+  private drawFinished(el: InkElement, dark: boolean, invert: boolean) {
     const ctx = this.ctx;
-    const geo = inkGeometry(el, pressure);
+    const geo = inkGeometry(el);
     const color = displayInkColor(el.color, dark, invert);
     if (geo.mode === 'fill') {
       ctx.fillStyle = color;

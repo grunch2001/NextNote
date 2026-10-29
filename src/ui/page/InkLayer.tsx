@@ -13,16 +13,14 @@ const InkPath = memo(function InkPath({
   el,
   dark,
   invert,
-  pressure,
   selected,
 }: {
   el: InkElement;
   dark: boolean;
   invert: boolean;
-  pressure: boolean;
   selected: boolean;
 }) {
-  const geo = inkGeometry(el, pressure);
+  const geo = inkGeometry(el);
   const color = displayInkColor(el.color, dark, invert);
   const cls = selected ? 'ink selected' : 'ink';
   // data-id: the live canvas keeps a finished stroke until its path is here
@@ -50,7 +48,6 @@ export const InkLayer = memo(function InkLayer({ width, height }: { width: numbe
   const onPdf = usePage((s) => s.kind === 'pdf');
   const dark = useIsDark() && !onPdf;
   const invert = useSettings((s) => s.invertInkInDark);
-  const pressure = useSettings((s) => s.pressure);
 
   const strokes = useMemo(
     () =>
@@ -66,12 +63,12 @@ export const InkLayer = memo(function InkLayer({ width, height }: { width: numbe
   return (
     <svg className="ink-layer" width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
       {still.map((s) => (
-        <InkPath key={s.id} el={s} dark={dark} invert={invert} pressure={pressure} selected={sel.has(s.id)} />
+        <InkPath key={s.id} el={s} dark={dark} invert={invert} selected={sel.has(s.id)} />
       ))}
       {drag && (
         <g transform={dragSvgTransform(drag)}>
           {moving.map((s) => (
-            <InkPath key={s.id} el={s} dark={dark} invert={invert} pressure={pressure} selected />
+            <InkPath key={s.id} el={s} dark={dark} invert={invert} selected />
           ))}
         </g>
       )}

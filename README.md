@@ -25,7 +25,7 @@
 
 - **Deine Daten, dein Server.** Die Notizen liegen als lesbare Dateien in einem Ordner deiner Nextcloud. Ein Microsoft-Konto oder eine fremde Cloud brauchst du nicht.
 - **Freie Seite wie in OneNote.** Text, Handschrift, Bilder und PDFs stehen dort auf der Seite, wo du sie hinsetzt.
-- **Stift ist kein Nachgedanke.** Druckstufen, Handballenerkennung, die S-Pen-Seitentaste als Radierer und Lasso-Auswahl.
+- **Stift ist kein Nachgedanke.** Die Tinte erscheint ohne Verzögerung direkt an der Stiftspitze, ungeglättet genau dort, wo der Stift war. Dazu Handballenerkennung, die S-Pen-Seitentaste als Radierer und Lasso-Auswahl.
 - **PDFs direkt in der Nextcloud beschriften.** Skripte und Übungsblätter bleiben in ihrem Ordner und werden als PDF mit Anmerkungen gespeichert, die jedes PDF-Programm anzeigt.
 - **Offline zuerst.** Alles wird lokal gespeichert und synchronisiert, sobald eine Verbindung besteht. Gleichzeitige Änderungen auf mehreren Geräten werden pro Element zusammengeführt.
 
@@ -66,6 +66,7 @@
 
 **Stift**
 - 4 Stifte und 3 Textmarker mit frei wählbarer Farbe und Stärke
+- Tinte wie in Samsung Notes: Auf Android zeichnet eine eigene Ebene über der App den Strich direkt aus den Stiftdaten, an der Spitze ohne Verzögerung und ohne Nachkorrektur. Striche werden nicht geglättet und haben eine gleichmäßige Breite; die Druckempfindlichkeit lässt sich in den Einstellungen einschalten
 - Radierer für ganze Striche oder punktgenau
 - Lasso: verschieben, skalieren, Farbe ändern, duplizieren, kopieren
 - Formen: Linie, Pfeil, Rechteck, Ellipse und drei Koordinatensysteme
@@ -224,11 +225,11 @@ npm run icons             # App-Icons aus build-resources/icon.svg erzeugen
 | `src/db` | Lokale Datenbank (IndexedDB über Dexie) und alle Änderungsoperationen |
 | `src/sync` | WebDAV-Client, Nextcloud Login Flow v2, Sync-Engine (ETags, If-Match, Ordner-ETags, um unveränderte Notizbücher zu überspringen) |
 | `src/pdf` | PDF-Ordner: Seitenlayout und Umrechnung in PDF-Koordinaten (auch gedrehte Seiten), Lesen und Schreiben der Anmerkungen mit `@cantoo/pdf-lib`, Abgleich mit dem Nextcloud-Ordner |
-| `src/ink` | Stifteingabe, Gesten (Stift/Finger/Maus, Handballenerkennung, Zoom), Radierer, Lasso |
+| `src/ink` | Stifteingabe, Gesten (Stift/Finger/Maus, Handballenerkennung, Zoom), Radierer, Lasso; Strichgeometrie (`direct.ts`: eine Scheibe pro Stiftpunkt, verbunden über Tangenten) |
 | `src/ui`, `src/editor` | Oberfläche (React) und Rich-Text-Editor (TipTap) |
 | `src/import/onenote` | OneNote-Import: Microsoft-Anmeldung (OAuth mit PKCE), Graph-Client mit Drosselungs-Handling, Umwandlung des Seiten-HTML in Textcontainer und Bilder, InkML-Leser für die Handschrift |
 | `electron/` | Windows-Hülle: HTTP über den Hauptprozess, App-Passwort per DPAPI verschlüsselt, Microsoft-Anmeldung im Systembrowser mit Rückleitung auf `localhost` |
-| `android/` | Capacitor-Projekt mit drei eigenen Plugins: `NativeHttpPlugin` (OkHttp, weil WebDAV-Methoden wie PROPFIND und MKCOL mit dem Standard-HTTP von Capacitor nicht gehen), `NativeClipboardPlugin` (Zwischenablage inkl. Bildern) und `NativeSecureStoragePlugin` (App-Passwort, mit dem Android-Keystore verschlüsselt) |
+| `android/` | Capacitor-Projekt mit eigenen Plugins, unter anderem `NativeHttpPlugin` (OkHttp, weil WebDAV-Methoden wie PROPFIND und MKCOL mit dem Standard-HTTP von Capacitor nicht gehen), `NativeClipboardPlugin` (Zwischenablage inkl. Bildern), `NativeSecureStoragePlugin` (App-Passwort, mit dem Android-Keystore verschlüsselt) und `NativeInkPlugin`: Eine transparente Front-Buffer-Ebene (`NativeInk`, Jetpack `CanvasFrontBufferedRenderer`) zeichnet den Strich, der gerade entsteht, direkt aus den Stiftereignissen; die Seite speichert ihn aus denselben Punkten und meldet, sobald sie ihn selbst zeigt |
 | `tools/` | Build-Skripte, Mock-Nextcloud und Mock-Microsoft-Graph für die Tests, Icon-Erzeugung, End-to-End-Test der Windows-App |
 
 ### Windows-Version bauen

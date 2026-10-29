@@ -1,5 +1,6 @@
 package de.luisschuster.nextnote;
 
+import android.os.Build;
 import android.os.Bundle;
 import android.view.MotionEvent;
 import com.getcapacitor.BridgeActivity;
@@ -15,13 +16,25 @@ public class MainActivity extends BridgeActivity {
     /** The current stylus contact began with the side button held. */
     private boolean erasing;
 
+    /** Low-latency live ink above the WebView (Android 10+). */
+    private NativeInk ink;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeHttpPlugin.class);
         registerPlugin(NativeClipboardPlugin.class);
         registerPlugin(NativeSecureStoragePlugin.class);
         registerPlugin(NativePenPlugin.class);
+        registerPlugin(NativeInkPlugin.class);
         super.onCreate(savedInstanceState);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && getBridge() != null) ink = NativeInk.attach(this, getBridge().getWebView());
+    }
+
+    @Override
+    public void onDestroy() {
+        if (ink != null) ink.release();
+        ink = null;
+        super.onDestroy();
     }
 
     // The WebView does not tell web pages about the side button of a stylus that touches the
@@ -31,6 +44,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ink != null) ink.onTouchEvent(ev);
         boolean stylus = penButtonErases && hasStylus(ev);
         int action = ev.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) erasing = stylus && (ev.getButtonState() & SIDE_BUTTON) != 0;
