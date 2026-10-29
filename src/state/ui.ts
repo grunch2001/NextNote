@@ -50,6 +50,15 @@ interface UIState {
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 
+const DEFAULT_PENS: PenPreset[] = [
+  { color: '#000000', size: 2.5 },
+  { color: '#1976D2', size: 2.5 },
+  { color: '#D32F2F', size: 2.5 },
+  { color: '#388E3C', size: 4 },
+  { color: '#F57C00', size: 2.5 },
+  { color: '#7B1FA2', size: 2.5 },
+];
+
 export const useUI = create<UIState>()(
   persist(
     (set, get) => ({
@@ -65,12 +74,7 @@ export const useUI = create<UIState>()(
       ribbonTab: 'home',
       ribbonCollapsed: false,
       tool: 'select',
-      pens: [
-        { color: '#000000', size: 2.5 },
-        { color: '#1976D2', size: 2.5 },
-        { color: '#D32F2F', size: 2.5 },
-        { color: '#388E3C', size: 4 },
-      ],
+      pens: DEFAULT_PENS,
       penIndex: 0,
       highlighters: [
         { color: '#FFF200', size: 16 },
@@ -129,7 +133,13 @@ export const useUI = create<UIState>()(
     }),
     {
       name: 'nextnote.ui',
-      version: 1,
+      version: 2,
+      migrate: (state, version) => {
+        const s = state as Partial<UIState>;
+        // 2: six pens instead of four, the customised ones stay as they are
+        if (version < 2 && s.pens) s.pens = [...s.pens, ...DEFAULT_PENS.slice(s.pens.length)];
+        return s as UIState;
+      },
       partialize: (s) => ({
         notebookId: s.notebookId,
         sectionId: s.sectionId,
@@ -140,7 +150,7 @@ export const useUI = create<UIState>()(
         lastSectionByNotebook: s.lastSectionByNotebook,
         navOpen: s.navOpen,
         pagesOpen: s.pagesOpen,
-        ribbonTab: s.ribbonTab === 'table' ? 'home' : s.ribbonTab,
+        ribbonTab: (s.ribbonTab === 'table' ? 'home' : s.ribbonTab) as RibbonTab,
         ribbonCollapsed: s.ribbonCollapsed,
         pens: s.pens,
         penIndex: s.penIndex,
