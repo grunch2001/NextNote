@@ -29,11 +29,12 @@
 - **PDFs direkt in der Nextcloud beschriften.** Skripte und Übungsblätter bleiben in ihrem Ordner und werden als PDF mit Anmerkungen gespeichert, die jedes PDF-Programm anzeigt.
 - **Offline zuerst.** Alles wird lokal gespeichert und synchronisiert, sobald eine Verbindung besteht. Gleichzeitige Änderungen auf mehreren Geräten werden pro Element zusammengeführt.
 
-## Neu in Version 1.2
+## Neu in Version 1.3
 
-- **PDF-Ordner aus Nextcloud:** Ein Abschnitt zeigt die PDFs eines beliebigen Nextcloud-Ordners. PDFs öffnen, mit allen Werkzeugen beschriften und als PDF in denselben Ordner zurückspeichern
-- **Notizbücher schließen und öffnen:** Notizbücher, die du auf einem Gerät gerade nicht brauchst, werden ausgeblendet und nicht synchronisiert; ihre PDFs belegen dort keinen Speicher
-- **PDFs bei Bedarf:** Eine PDF wird erst heruntergeladen, wenn du sie öffnest
+- **Tinte direkt an der Spitze wie in Samsung Notes:** Auf Android zeichnet eine eigene Ebene Stift- und Textmarkerstriche ohne Verzögerung, ungeglättet und mit gleichmäßiger Breite
+- **6 Stifte** statt 4, neu in Orange und Lila
+- **Große PDFs auf Android:** PDFs mit vielen Megabyte laden und speichern ohne Absturz
+- **OneNote-Import:** Text und Handschrift liegen wie in OneNote; Seiten mit fehlender alter Handschrift werden gemeldet
 
 ## Funktionen
 
@@ -65,7 +66,7 @@
 - Auch PDFs, die nur gegen Änderungen geschützt sind (typisch für Vorlesungsskripte), und gedrehte Seiten lassen sich beschriften
 
 **Stift**
-- 4 Stifte und 3 Textmarker mit frei wählbarer Farbe und Stärke
+- 6 Stifte und 3 Textmarker mit frei wählbarer Farbe und Stärke
 - Tinte wie in Samsung Notes: Auf Android zeichnet eine eigene Ebene über der App Stift- und Textmarkerstriche direkt aus den Stiftdaten, an der Spitze ohne Verzögerung und ohne Nachkorrektur. Striche werden nicht geglättet und haben eine gleichmäßige Breite; die Druckempfindlichkeit lässt sich in den Einstellungen einschalten
 - Radierer für ganze Striche oder punktgenau
 - Lasso: verschieben, skalieren, Farbe ändern, duplizieren, kopieren
@@ -262,7 +263,7 @@ keyPassword=…
 
 Beide Dateien sind per `.gitignore` vom Repository ausgeschlossen. Bewahre sie sicher auf: Ohne denselben Schlüssel lassen sich spätere Versionen nicht als Update über eine installierte App installieren.
 
-## Grenzen der Version 1.2
+## Grenzen der Version 1.3
 
 - Keine Handschrifterkennung (Umwandlung in Text)
 - OneNote-Import nur unter Windows und nur für Notizbücher in OneDrive; `.one`-Dateien lassen sich nicht direkt öffnen. Ältere Handschrift muss in OneNote eventuell erst als Zeichnung markiert werden (siehe [Von OneNote umziehen](#von-onenote-umziehen))

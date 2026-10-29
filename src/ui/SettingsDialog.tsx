@@ -10,7 +10,7 @@ import { confirmDialog, Modal } from './Dialogs';
 import { oneNoteImportAvailable } from './OneNoteImport';
 import { toast } from './Toasts';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 function timeAgo(ts: number | null) {
   if (!ts) return 'noch nie';
