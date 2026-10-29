@@ -32,9 +32,10 @@ import java.util.List;
  * Low-latency live ink for the stylus (Android 10+).
  *
  * A transparent front-buffered layer above the WebView draws the stroke being written right from
- * the input events, without the delay of the WebView's rendering pipeline. Strokes are drawn like
+ * the input events, without the delay of the WebView's rendering pipeline. Pen strokes are drawn like
  * direct strokes on the page (src/ink/direct.ts): a disc per point, joined by tangents, so a new
- * point only adds to what is drawn. The page (src/ink/nativeInk.ts) still decides what a pen contact
+ * point only adds to what is drawn. Highlighter strokes are a semi-transparent polyline of even
+ * width under the pen strokes, like on the page. The page (src/ink/nativeInk.ts) still decides what a pen contact
  * does and stores the stroke from the points this layer sends when the pen lifts. Finished strokes
  * stay on the layer until the page reports that it shows them itself, then the layer is cleared.
  *
@@ -58,7 +59,9 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
     static final class Config {
         boolean enabled;
         boolean auto;
+        boolean highlighter;
         int color = Color.BLACK;
+        float alpha = 1;
         /** Pen size in page units; the width is size * (widthBase + widthPressure * pressure). */
         double size = 2.5;
         double widthBase = 0.5;
@@ -109,6 +112,7 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
     private final Path path = new Path();
     private RenderNode offscreen;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint markerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint blitPaint = new Paint();
     private final Rect dirty = new Rect();
     private final RectF region = new RectF();
@@ -118,6 +122,8 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
         final int seq;
         final int pointerId;
         final long downTime;
+        final boolean highlighter;
+        /** With the opacity of a highlighter. */
         final int color;
         final double half;
         final double widthBase;
@@ -154,7 +160,8 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
             this.seq = seq;
             this.pointerId = pointerId;
             this.downTime = downTime;
-            this.color = c.color;
+            this.highlighter = c.highlighter;
+            this.color = c.highlighter ? (c.color & 0xffffff) | (Math.round(c.alpha * 255) << 24) : c.color;
             this.half = c.size / 2;
             this.widthBase = c.widthBase;
             this.widthPressure = c.widthPressure;
@@ -172,7 +179,7 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
 
         /** Radius in surface pixels, like directRadius() in src/ink/direct.ts. */
         double radius(double pressure) {
-            return half * (uniform ? 1 : widthBase + widthPressure * pressure) * scale;
+            return half * (uniform || highlighter ? 1 : widthBase + widthPressure * pressure) * scale;
         }
     }
 
@@ -226,6 +233,9 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
             }
         );
         blitPaint.setBlendMode(BlendMode.SRC);
+        markerPaint.setStyle(Paint.Style.STROKE);
+        markerPaint.setStrokeCap(Paint.Cap.ROUND);
+        markerPaint.setStrokeJoin(Paint.Join.ROUND);
     }
 
     /** Puts the layer above the WebView. */
@@ -268,11 +278,13 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
     /** The page shows the stroke now. */
     void shown(int strokeSeq) {
         for (int i = 0; i < pending.size(); i++) {
-            if (pending.get(i).seq == strokeSeq) {
-                pending.remove(i);
-                scheduleClear();
-                return;
-            }
+            Stroke s = pending.get(i);
+            if (s.seq != strokeSeq) continue;
+            pending.remove(i);
+            // a highlighter shown twice looks darker: it goes at once, pen strokes with the next clear
+            if (s.highlighter) remove(s);
+            scheduleClear();
+            return;
         }
     }
 
@@ -501,8 +513,11 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
         offscreen.setClipRect(dirty);
         RecordingCanvas rc = offscreen.beginRecording();
         rc.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
-        for (Stroke s : scene) drawStroke(rc, s);
-        if (renderLive != null) drawStroke(rc, renderLive);
+        // highlighters under the pen strokes, like on the page
+        for (Stroke s : scene) if (s.highlighter) drawStroke(rc, s);
+        if (renderLive != null && renderLive.highlighter) drawStroke(rc, renderLive);
+        for (Stroke s : scene) if (!s.highlighter) drawStroke(rc, s);
+        if (renderLive != null && !renderLive.highlighter) drawStroke(rc, renderLive);
         offscreen.endRecording();
         canvas.save();
         canvas.clipRect(dirty);
@@ -514,6 +529,10 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
     /** The shapes of a stroke inside {@link #box}. */
     private void drawStroke(Canvas canvas, Stroke s) {
         if (!RectF.intersects(s.bounds, box)) return;
+        if (s.highlighter) {
+            drawMarker(canvas, s);
+            return;
+        }
         path.rewind();
         double[] p = s.drawnPts;
         double px = 0;
@@ -533,6 +552,36 @@ final class NativeInk implements CanvasFrontBufferedRenderer.Callback<NativeInk.
         }
         paint.setColor(s.color);
         canvas.drawPath(path, paint);
+    }
+
+    /**
+     * The segments of a highlighter inside {@link #box}, stroked in one go: where the stroke crosses
+     * itself it is not darker (the page draws it as one path with an opacity, too).
+     */
+    private void drawMarker(Canvas canvas, Stroke s) {
+        path.rewind();
+        double[] p = s.drawnPts;
+        double r = s.radius(0);
+        double px = 0;
+        double py = 0;
+        for (int i = 0; i < s.drawnN; i++) {
+            double x = p[i * 3] * s.scale + s.offX;
+            double y = p[i * 3 + 1] * s.scale + s.offY;
+            if (i == 0) {
+                // a lone point is a dot (a segment of length 0 with round caps)
+                px = x;
+                py = y;
+            }
+            if (Math.max(x, px) + r >= box.left && Math.min(x, px) - r <= box.right && Math.max(y, py) + r >= box.top && Math.min(y, py) - r <= box.bottom) {
+                path.moveTo((float) px, (float) py);
+                path.lineTo((float) x, (float) y);
+            }
+            px = x;
+            py = y;
+        }
+        markerPaint.setColor(s.color);
+        markerPaint.setStrokeWidth((float) (r * 2));
+        canvas.drawPath(path, markerPaint);
     }
 
     /** The tangents joining two discs, like directShapes() in src/ink/direct.ts (counter-clockwise like the discs). */

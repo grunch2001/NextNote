@@ -64,8 +64,11 @@ export interface NativeInkConfig {
   enabled: boolean;
   /** Select tool: a short tap is a click, so a stroke shows only once it moves. */
   auto: boolean;
-  /** Ink colour as displayed. */
+  /** Highlighter: a polyline of even width, semi-transparent and handed over to the page right away. */
+  highlighter: boolean;
+  /** Ink colour as displayed, and its opacity. */
   color: string;
+  alpha: number;
   /** Pen size (page units) and width per pressure, see ink/direct.ts. */
   size: number;
   widthBase: number;

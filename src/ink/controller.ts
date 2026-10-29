@@ -69,6 +69,12 @@ const PREDICT_MAX = 4;
 const HANDOFF_MAX_MS = 1000;
 /** The pen hovering over the app refreshes what the native ink layer knows about the page, at most this often. */
 const NATIVE_SYNC_MS = 100;
+/**
+ * A highlighter stroke is semi-transparent: shown by the native layer and the page at once it looks
+ * darker, shown by neither it flickers. The layer drops it this many frames after the page has it
+ * (measured on a Galaxy Tab S10 Lite: 0 leaves a one-frame gap, 2 one darker frame).
+ */
+const MARKER_HANDOFF_FRAMES = 1;
 
 const isTextTarget = (t: Element) => !!t.closest('.text-container .ProseMirror, input, textarea, select, [contenteditable="true"]');
 const isOwnPointer = (t: Element) => !!t.closest('[data-own-pointer], button, a[href]');
@@ -94,7 +100,7 @@ export class CanvasController {
   /** Finished strokes that stay on the canvas until their SVG version is in the page. */
   private handoff: { el: InkElement; t0: number }[] = [];
   /** The same for strokes on the native ink layer. */
-  private nativeHandoff: { id: ID; seq: number; t0: number }[] = [];
+  private nativeHandoff: { id: ID; seq: number; t0: number; marker: boolean; frames: number }[] = [];
   private lastNativeSync = -1e9;
   private nativeSyncRaf = 0;
   private unsubscribe: (() => void)[] = [];
@@ -187,7 +193,8 @@ export class CanvasController {
     const ui = useUI.getState();
     const st = useSettings.getState();
     const auto = ui.tool === 'select' && st.penAlwaysDraws;
-    const pen = ui.pens[ui.penIndex];
+    const marker = ui.tool === 'highlighter';
+    const pen = marker ? ui.highlighters[ui.highlighterIndex] : ui.pens[ui.penIndex];
     const box = (r: DOMRect) => [r.left, r.top, r.right, r.bottom];
     const area = this.d.scroller.getBoundingClientRect();
     const exclude: number[][] = [];
@@ -202,13 +209,15 @@ export class CanvasController {
     this.d.scroller.parentElement?.querySelectorAll(':scope > :not(.page-scroller, canvas)').forEach(skip);
     document.querySelectorAll('.toasts > *').forEach(skip);
     nativeInk.configure({
-      enabled: (ui.tool === 'pen' || auto) && !document.querySelector('.dialog-backdrop, .popover'),
+      enabled: (ui.tool === 'pen' || marker || auto) && !document.querySelector('.dialog-backdrop, .popover'),
       auto,
+      highlighter: marker,
       color: displayInkColor(pen.color, this.d.isDark(), st.invertInkInDark),
+      alpha: marker ? HIGHLIGHTER_OPACITY : 1,
       size: pen.size,
       widthBase: DIRECT_WIDTH.base,
       widthPressure: DIRECT_WIDTH.pressure,
-      uniform: !st.pressure,
+      uniform: marker || !st.pressure,
       zoom: this.zoom,
       dpr: window.devicePixelRatio || 1,
       rect: box(area),
@@ -374,7 +383,7 @@ export class CanvasController {
     const st = useSettings.getState();
     const preset = tool === 'pen' ? ui.pens[ui.penIndex] : ui.highlighters[ui.highlighterIndex];
     const p = this.toPage(e.clientX, e.clientY);
-    const native = tool === 'pen' && e.pointerType === 'pen' && nativeInk.drawsAt(e.clientX, e.clientY);
+    const native = e.pointerType === 'pen' && nativeInk.drawsAt(e.clientX, e.clientY);
     if (native) nativeInk.started();
     this.gesture = {
       kind: 'draw',
@@ -667,7 +676,7 @@ export class CanvasController {
       nativeInk.shown(stroke.seq);
       return;
     }
-    this.nativeHandoff.push({ id: el.id, seq: stroke.seq, t0: performance.now() });
+    this.nativeHandoff.push({ id: el.id, seq: stroke.seq, t0: performance.now(), marker: g.tool === 'highlighter', frames: 0 });
     this.scheduleRender();
   }
 
@@ -1093,7 +1102,8 @@ export class CanvasController {
     const t = performance.now();
     const { elements } = usePage.getState();
     this.nativeHandoff = this.nativeHandoff.filter((h) => {
-      const done = !elements[h.id] || t - h.t0 > HANDOFF_MAX_MS || !!this.d.page.querySelector(`.ink-layer [data-id="${h.id}"]`);
+      if (this.d.page.querySelector(`.ink-layer [data-id="${h.id}"]`)) h.frames++;
+      const done = !elements[h.id] || t - h.t0 > HANDOFF_MAX_MS || h.frames > (h.marker ? MARKER_HANDOFF_FRAMES : 0);
       if (done) nativeInk.shown(h.seq);
       return !done;
     });

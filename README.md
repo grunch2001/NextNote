@@ -66,7 +66,7 @@
 
 **Stift**
 - 4 Stifte und 3 Textmarker mit frei wählbarer Farbe und Stärke
-- Tinte wie in Samsung Notes: Auf Android zeichnet eine eigene Ebene über der App den Strich direkt aus den Stiftdaten, an der Spitze ohne Verzögerung und ohne Nachkorrektur. Striche werden nicht geglättet und haben eine gleichmäßige Breite; die Druckempfindlichkeit lässt sich in den Einstellungen einschalten
+- Tinte wie in Samsung Notes: Auf Android zeichnet eine eigene Ebene über der App Stift- und Textmarkerstriche direkt aus den Stiftdaten, an der Spitze ohne Verzögerung und ohne Nachkorrektur. Striche werden nicht geglättet und haben eine gleichmäßige Breite; die Druckempfindlichkeit lässt sich in den Einstellungen einschalten
 - Radierer für ganze Striche oder punktgenau
 - Lasso: verschieben, skalieren, Farbe ändern, duplizieren, kopieren
 - Formen: Linie, Pfeil, Rechteck, Ellipse und drei Koordinatensysteme

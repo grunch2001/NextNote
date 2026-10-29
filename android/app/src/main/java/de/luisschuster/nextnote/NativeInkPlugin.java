@@ -43,6 +43,8 @@ public class NativeInkPlugin extends Plugin {
         NativeInk.Config c = new NativeInk.Config();
         c.enabled = d.optBoolean("enabled", false);
         c.auto = d.optBoolean("auto", false);
+        c.highlighter = d.optBoolean("highlighter", false);
+        c.alpha = (float) d.optDouble("alpha", 1);
         try {
             c.color = Color.parseColor(d.optString("color", "#000000"));
         } catch (IllegalArgumentException e) {
