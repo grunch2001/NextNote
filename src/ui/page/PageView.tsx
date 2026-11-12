@@ -13,7 +13,8 @@ import { debounce, newId, now } from '../../model/util';
 import { draftTexts, elementClipboard, measured, pageActions, setElementClipboard, usePage } from '../../state/page';
 import { useUI } from '../../state/ui';
 import { syncManager, useSync } from '../../sync/manager';
-import { pdfLayout } from '../../pdf/layout';
+import { pageIndexAt, pdfLayout } from '../../pdf/layout';
+import { loadPdfPosition, savePdfPosition } from './pdfPosition';
 import { isPdfDirty } from '../../pdf/repo';
 import { platform } from '../../platform';
 import { createImageElement } from '../assets';
@@ -531,7 +532,48 @@ export function PageView() {
   // scroll to the top when another page opens
   useEffect(() => {
     scrollerRef.current?.scrollTo({ left: 0, top: 0 });
+    pdfRestoredRef.current = null;
   }, [pageId]);
+
+  // a PDF opens where it was last viewed on this device
+  const pdfRestoredRef = useRef<ID | null>(null);
+  const pdfId = pdf?.id ?? null;
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || !pdfId || !layout || pdfId !== pageId) return;
+    const { slots } = layout;
+    if (!slots.length) return;
+    if (pdfRestoredRef.current !== pdfId) {
+      pdfRestoredRef.current = pdfId;
+      const pos = loadPdfPosition(pdfId);
+      if (pos) {
+        const slot = slots[Math.min(Math.max(0, Math.floor(pos.page)), slots.length - 1)];
+        const off = Math.min(1, Math.max(0, pos.off));
+        scroller.scrollTo({ left: scroller.scrollLeft, top: (slot.y + off * slot.h) * useUI.getState().zoom });
+      }
+    }
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const save = () => {
+      timer = null;
+      // another page is opening (the scroll to the top belongs to it)
+      if (useUI.getState().pageId !== pdfId) return;
+      const top = scroller.scrollTop / useUI.getState().zoom;
+      const page = pageIndexAt(slots, top);
+      const slot = slots[page];
+      savePdfPosition(pdfId, { page, off: Math.min(1, Math.max(0, (top - slot.y) / slot.h)) });
+    };
+    const onScroll = () => {
+      if (timer === null) timer = setTimeout(save, 300);
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      if (timer !== null) {
+        clearTimeout(timer);
+        save();
+      }
+    };
+  }, [pdfId, pageId, layout, viewMounted]);
 
   const list = useMemo(() => Object.values(elements), [elements]);
   const bounds = useMemo(() => {
