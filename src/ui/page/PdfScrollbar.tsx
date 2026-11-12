@@ -131,9 +131,7 @@ export const PdfScrollbar = memo(function PdfScrollbar({ scroller, slots, zoom }
     >
       <div className="pdf-scrollbar-track" ref={trackRef}>
         <div className="pdf-scrollbar-thumb" style={{ top: `calc(${frac} * (100% - ${THUMB}px))` }}>
-          <span className="pdf-scrollbar-page">
-            {page + 1} / {slots.length}
-          </span>
+          <span className="pdf-scrollbar-page">{page + 1}</span>
         </div>
       </div>
       <span className="pdf-scrollbar-total" title={`${slots.length} Seiten`}>
