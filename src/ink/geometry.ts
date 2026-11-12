@@ -44,16 +44,28 @@ function pushSegment(out: number[], ax: number, ay: number, bx: number, by: numb
   for (let i = 0; i <= n; i++) out.push(ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n);
 }
 
+/*
+ * Elements are immutable (every change makes a new object), so what is derived from a stroke is kept
+ * per object: hit tests (eraser, taps) and the page bounds run over every stroke on each change.
+ * The returned arrays and rects are shared: read them, never modify them.
+ */
+const runsCache = new WeakMap<InkElement, number[][]>();
+const boundsCache = new WeakMap<InkElement, Rect>();
+
 /** Points along the visible geometry of a stroke as flat x,y pairs, one list per connected piece. */
 export function strokeRuns(el: InkElement): number[][] {
+  const hit = runsCache.get(el);
+  if (hit) return hit;
+  let runs: number[][];
   if (isAxes(el.shape)) {
-    return axesPolylines(el).map((line) => {
+    runs = axesPolylines(el).map((line) => {
       const out: number[] = [];
       for (let i = 0; i + 3 < line.length; i += 2) pushSegment(out, line[i], line[i + 1], line[i + 2], line[i + 3]);
       return out;
     });
-  }
-  return [strokeSamples(el)];
+  } else runs = [strokeSamples(el)];
+  runsCache.set(el, runs);
+  return runs;
 }
 
 /** Points along the visible geometry of a stroke as flat x,y pairs. */
@@ -95,6 +107,15 @@ export function strokeSamples(el: InkElement): number[] {
 }
 
 export function strokeBounds(el: InkElement): Rect {
+  let b = boundsCache.get(el);
+  if (!b) {
+    b = computeStrokeBounds(el);
+    boundsCache.set(el, b);
+  }
+  return b;
+}
+
+function computeStrokeBounds(el: InkElement): Rect {
   const s = strokeSamples(el);
   let minX = Infinity;
   let minY = Infinity;
@@ -112,7 +133,7 @@ export function strokeBounds(el: InkElement): Rect {
 }
 
 export function elementBounds(el: PageElement, measured?: Map<ID, { w: number; h: number }>): Rect {
-  if (el.type === 'ink') return strokeBounds(el);
+  if (el.type === 'ink') return { ...strokeBounds(el) };
   if (el.type === 'image') return { x: el.x, y: el.y, w: el.w, h: el.h };
   const m = measured?.get(el.id);
   return { x: el.x, y: el.y, w: m?.w ?? el.w ?? DEFAULT_TEXT_SIZE.w, h: m?.h ?? DEFAULT_TEXT_SIZE.h };

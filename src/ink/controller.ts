@@ -5,7 +5,7 @@ import { newId, now } from '../model/util';
 import { platform } from '../platform';
 import { measured, pageActions, usePage } from '../state/page';
 import { useSettings } from '../state/settings';
-import { INK_TOOLS, useUI, type Tool } from '../state/ui';
+import { INK_TOOLS, MAX_ZOOM, MIN_ZOOM, useUI, type Tool } from '../state/ui';
 import { eraseFromStroke, elementsInLasso, elementsInRect, strokeHit, topmostStrokeAt } from './geometry';
 import { DIRECT_WIDTH, directPath, directShapes } from './direct';
 import { nativeInk } from './nativeInk';
@@ -39,10 +39,23 @@ type DrawGesture = {
   moved: number;
 };
 
+type EraseGesture = {
+  kind: 'erase';
+  pointerId: number;
+  x: number;
+  y: number;
+  r: number;
+  mode: 'stroke' | 'point';
+  /** The strokes as the eraser sees them: the page's, with this gesture's changes already applied. */
+  live: Map<ID, InkElement>;
+  /** Changes not yet in the page; they go in once per frame, not on every pointer event. */
+  pending: Record<ID, InkElement | null>;
+};
+
 type Gesture =
   | DrawGesture
   | { kind: 'shape'; pointerId: number; shape: Exclude<ShapeKind, 'poly'>; color: string; size: number; x0: number; y0: number; x1: number; y1: number }
-  | { kind: 'erase'; pointerId: number; x: number; y: number; r: number; mode: 'stroke' | 'point' }
+  | EraseGesture
   | { kind: 'lasso'; pointerId: number; pts: number[] }
   | { kind: 'rect'; pointerId: number; x0: number; y0: number; x1: number; y1: number; started: boolean; cx0: number; cy0: number }
   | { kind: 'move'; pointerId: number; cx0: number; cy0: number }
@@ -76,6 +89,14 @@ const NATIVE_SYNC_MS = 100;
  */
 const MARKER_HANDOFF_FRAMES = 2;
 
+/** Ctrl+wheel (and touchpad pinch on the desktop) commits the zoom this long after the last event. */
+const WHEEL_ZOOM_COMMIT_MS = 160;
+
+const clampZoom = (z: number) => Math.round(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z)) * 100) / 100;
+
+/** The speed of a fling is measured over this much of the last movement. */
+const PAN_SPEED_WINDOW_MS = 80;
+
 const isTextTarget = (t: Element) => !!t.closest('.text-container .ProseMirror, input, textarea, select, [contenteditable="true"]');
 const isOwnPointer = (t: Element) => !!t.closest('[data-own-pointer], button, a[href]');
 
@@ -85,8 +106,12 @@ export class CanvasController {
   private touchMode: 'idle' | 'pending' | 'pan' | 'pinch' = 'idle';
   private pinch0: { dist: number; zoom: number; px: number; py: number } | null = null;
   private lastPan = { x: 0, y: 0, t: 0 };
-  private velocity = { x: 0, y: 0 };
+  /** Recent finger positions while panning (event time), for the speed when the finger lifts. */
+  private panSamples: { t: number; x: number; y: number }[] = [];
   private inertiaRaf = 0;
+  /** Finger movement not yet applied to the scroll position: applied once per frame. */
+  private panDelta = { x: 0, y: 0 };
+  private panRaf = 0;
   private renderRaf = 0;
   private lastPenTime = -1e9;
   private penDown = false;
@@ -103,6 +128,12 @@ export class CanvasController {
   private nativeHandoff: { id: ID; seq: number; t0: number; marker: boolean; frames: number }[] = [];
   private lastNativeSync = -1e9;
   private nativeSyncRaf = 0;
+  /**
+   * Zooming in progress (pinch, Ctrl+wheel): the page is only scaled on screen by a transform of the
+   * sizer, the zoom itself (re-rendering the whole page) is set once the gesture ends.
+   */
+  private preview: { z: number; cx: number; cy: number; px: number; py: number } | null = null;
+  private wheelTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribe: (() => void)[] = [];
   private destroyed = false;
 
@@ -144,9 +175,16 @@ export class CanvasController {
     nativeInk.clearIfShowing();
     for (const h of this.nativeHandoff) nativeInk.shown(h.seq);
     cancelAnimationFrame(this.inertiaRaf);
+    cancelAnimationFrame(this.panRaf);
     cancelAnimationFrame(this.renderRaf);
     cancelAnimationFrame(this.nativeSyncRaf);
     this.cancelLongPress();
+    this.commitZoom();
+    const g = this.gesture;
+    if (g?.kind === 'erase') {
+      this.flushErase(g);
+      pageActions.endBatch();
+    }
   }
 
   private cancelLongPress() {
@@ -154,8 +192,9 @@ export class CanvasController {
     this.longPressTimer = null;
   }
 
+  /** The zoom the page is shown at right now (during a zoom gesture not yet the stored one). */
   private get zoom() {
-    return useUI.getState().zoom;
+    return this.preview?.z ?? useUI.getState().zoom;
   }
 
   private penNear() {
@@ -249,6 +288,7 @@ export class CanvasController {
   private down(e: PointerEvent) {
     const isPen = e.pointerType === 'pen';
     const isTouch = e.pointerType === 'touch';
+    if (!isTouch) this.commitZoom();
     if (isPen) {
       this.lastPenTime = performance.now();
       this.penDown = true;
@@ -413,9 +453,18 @@ export class CanvasController {
     const ui = useUI.getState();
     const p = this.toPage(e.clientX, e.clientY);
     pageActions.beginBatch();
-    this.gesture = { kind: 'erase', pointerId: e.pointerId, x: p.x, y: p.y, r: ui.eraserSize / 2 / this.zoom, mode: ui.eraserMode };
+    const live = new Map<ID, InkElement>();
+    for (const el of this.elements()) if (el.type === 'ink') live.set(el.id, el);
+    this.gesture = { kind: 'erase', pointerId: e.pointerId, x: p.x, y: p.y, r: ui.eraserSize / 2 / this.zoom, mode: ui.eraserMode, live, pending: {} };
     this.eraseAt(p.x, p.y, p.x, p.y);
     this.scheduleRender();
+  }
+
+  /** Puts what the eraser removed into the page (once per frame, and when the pen lifts). */
+  private flushErase(g: EraseGesture) {
+    const snap = g.pending;
+    g.pending = {};
+    if (Object.keys(snap).length) pageActions.replace(snap);
   }
 
   private eraseAt(x0: number, y0: number, x1: number, y1: number) {
@@ -423,22 +472,27 @@ export class CanvasController {
     if (!g || g.kind !== 'erase') return;
     const dist = Math.hypot(x1 - x0, y1 - y0);
     const steps = Math.max(1, Math.ceil(dist / (g.r / 2)));
+    const drop = (id: ID) => {
+      g.live.delete(id);
+      // a piece cut off earlier in this gesture that never reached the page simply goes away
+      if (g.pending[id]) delete g.pending[id];
+      else g.pending[id] = null;
+    };
     for (let i = 1; i <= steps; i++) {
       const x = x0 + ((x1 - x0) * i) / steps;
       const y = y0 + ((y1 - y0) * i) / steps;
-      const strokes = this.elements().filter((el): el is InkElement => el.type === 'ink');
-      if (g.mode === 'stroke') {
-        const hit = strokes.filter((s) => strokeHit(s, x, y, g.r)).map((s) => s.id);
-        if (hit.length) pageActions.remove(hit);
-      } else {
-        const snap: Record<ID, PageElement | null> = {};
-        for (const s of strokes) {
+      for (const s of [...g.live.values()]) {
+        if (g.mode === 'stroke') {
+          if (strokeHit(s, x, y, g.r)) drop(s.id);
+        } else {
           const pieces = eraseFromStroke(s, x, y, g.r);
           if (!pieces) continue;
-          snap[s.id] = null;
-          for (const piece of pieces) snap[piece.id] = piece;
+          drop(s.id);
+          for (const piece of pieces) {
+            g.live.set(piece.id, piece);
+            g.pending[piece.id] = piece;
+          }
         }
-        if (Object.keys(snap).length) pageActions.replace(snap);
       }
     }
   }
@@ -584,6 +638,7 @@ export class CanvasController {
         this.finishDraw(g, e);
         break;
       case 'erase':
+        this.flushErase(g);
         pageActions.endBatch();
         setLastInputKind('page');
         break;
@@ -757,13 +812,22 @@ export class CanvasController {
       this.touches.delete(e.pointerId);
       this.cancelLongPress();
       this.longPressed = false;
+      if (this.touchMode === 'pinch' && this.touches.size < 2) {
+        this.endPinch();
+        this.touchMode = this.touches.size ? 'pan' : 'idle';
+        const rest = [...this.touches.values()][0];
+        if (rest) this.lastPan = { x: rest.x, y: rest.y, t: performance.now() };
+      }
       if (this.touches.size === 0) this.touchMode = 'idle';
       return;
     }
     const g = this.gesture;
     if (!g || g.pointerId !== e.pointerId) return;
     this.gesture = null;
-    if (g.kind === 'erase') pageActions.endBatch();
+    if (g.kind === 'erase') {
+      this.flushErase(g);
+      pageActions.endBatch();
+    }
     if (g.kind === 'move') pageActions.setDrag(null);
     if (g.kind === 'draw' && g.pts.length > 6) this.finishDraw({ ...g, tapAsClick: false }, e);
     else if (g.kind === 'draw' && g.native) nativeInk.reject(g.sx, g.sy);
@@ -788,7 +852,7 @@ export class CanvasController {
     if (this.touches.size === 1) {
       this.touchMode = 'pending';
       this.lastPan = { x: e.clientX, y: e.clientY, t: performance.now() };
-      this.velocity = { x: 0, y: 0 };
+      this.panSamples = [];
       this.longPressed = false;
       this.cancelLongPress();
       // long press on the page (not inside text, where Android shows its own menu)
@@ -816,6 +880,11 @@ export class CanvasController {
     }
   }
 
+  private endPinch() {
+    this.pinch0 = null;
+    this.commitZoom();
+  }
+
   private touchMove(e: PointerEvent) {
     const t = this.touches.get(e.pointerId)!;
     t.x = e.clientX;
@@ -836,17 +905,17 @@ export class CanvasController {
       const nowT = performance.now();
       const dx = t.x - this.lastPan.x;
       const dy = t.y - this.lastPan.y;
-      this.d.scroller.scrollLeft -= dx;
-      this.d.scroller.scrollTop -= dy;
-      const dt = Math.max(1, nowT - this.lastPan.t);
-      this.velocity = { x: 0.8 * (dx / dt) + 0.2 * this.velocity.x, y: 0.8 * (dy / dt) + 0.2 * this.velocity.y };
+      this.panBy(dx, dy);
       this.lastPan = { x: t.x, y: t.y, t: nowT };
+      const samples = this.panSamples;
+      samples.push({ t: e.timeStamp, x: t.x, y: t.y });
+      while (samples.length > 2 && e.timeStamp - samples[0].t > PAN_SPEED_WINDOW_MS) samples.shift();
     } else if (this.touchMode === 'pinch' && this.pinch0 && this.touches.size >= 2) {
       const [a, b] = [...this.touches.values()];
       const dist = Math.max(10, Math.hypot(a.x - b.x, a.y - b.y));
       const mx = (a.x + b.x) / 2;
       const my = (a.y + b.y) / 2;
-      this.zoomAt(this.pinch0.zoom * (dist / this.pinch0.dist), mx, my, this.pinch0.px, this.pinch0.py);
+      this.previewZoom(this.pinch0.zoom * (dist / this.pinch0.dist), mx, my, this.pinch0.px, this.pinch0.py);
     }
   }
 
@@ -866,17 +935,18 @@ export class CanvasController {
       return;
     }
     if (this.touchMode === 'pinch') {
+      if (this.touches.size < 2) this.endPinch();
       if (this.touches.size === 1) {
         const rest = [...this.touches.values()][0];
         this.touchMode = 'pan';
         this.lastPan = { x: rest.x, y: rest.y, t: performance.now() };
-        this.velocity = { x: 0, y: 0 };
+        this.panSamples = [];
       } else if (this.touches.size === 0) this.touchMode = 'idle';
       return;
     }
     if (this.touchMode === 'pan' && this.touches.size === 0) {
       this.touchMode = 'idle';
-      if (performance.now() - this.lastPan.t < 80) this.startInertia();
+      if (performance.now() - this.lastPan.t < 80) this.startInertia(this.panVelocity(e.timeStamp));
       return;
     }
     if (this.touches.size === 0) this.touchMode = 'idle';
@@ -909,9 +979,46 @@ export class CanvasController {
     }
   }
 
-  private startInertia() {
+  /**
+   * Scrolls with the finger. Touch events can come more often than frames (or two in one frame):
+   * collecting them and scrolling once per frame keeps the motion even and saves layout work.
+   */
+  private panBy(dx: number, dy: number) {
+    this.panDelta.x += dx;
+    this.panDelta.y += dy;
+    if (!this.panRaf) this.panRaf = requestAnimationFrame(this.flushPan);
+  }
+
+  private flushPan = () => {
+    cancelAnimationFrame(this.panRaf);
+    this.panRaf = 0;
+    const { x, y } = this.panDelta;
+    this.panDelta = { x: 0, y: 0 };
+    if (x) this.d.scroller.scrollLeft -= x;
+    if (y) this.d.scroller.scrollTop -= y;
+  };
+
+  /**
+   * Finger speed (px/ms) over the last moments of the pan. From the distance over a time window, not
+   * from the last two events: these may come in the same frame and give a wild speed.
+   */
+  private panVelocity(upTime: number): { x: number; y: number } {
+    const s = this.panSamples;
+    this.panSamples = [];
+    if (s.length < 2) return { x: 0, y: 0 };
+    const a = s[0];
+    const b = s[s.length - 1];
+    // the finger rested before it lifted
+    if (upTime - b.t > 60) return { x: 0, y: 0 };
+    const dt = b.t - a.t;
+    if (dt < 8) return { x: 0, y: 0 };
+    return { x: (b.x - a.x) / dt, y: (b.y - a.y) / dt };
+  }
+
+  private startInertia(v: { x: number; y: number }) {
+    this.flushPan();
     let last = performance.now();
-    let { x: vx, y: vy } = this.velocity;
+    let { x: vx, y: vy } = v;
     const step = (ts: number) => {
       const dt = Math.min(40, ts - last);
       last = ts;
@@ -927,15 +1034,62 @@ export class CanvasController {
 
   private stopInertia() {
     cancelAnimationFrame(this.inertiaRaf);
+    this.flushPan();
   }
 
   /** Sets the zoom so that page point (px, py) stays under client point (cx, cy). */
   zoomAt(z: number, cx: number, cy: number, px: number, py: number) {
+    this.preview = null;
     flushSync(() => useUI.getState().setZoom(z));
-    const zr = this.zoom;
+    const zr = useUI.getState().zoom;
     const pr = this.d.page.getBoundingClientRect();
     this.d.scroller.scrollLeft += pr.left + px * zr - cx;
     this.d.scroller.scrollTop += pr.top + py * zr - cy;
+  }
+
+  /**
+   * Shows the page at zoom z with page point (px, py) under client point (cx, cy), without rendering
+   * it again: the sizer is scaled and moved to where zoom and scroll position will put the page.
+   */
+  private previewZoom(z: number, cx: number, cy: number, px: number, py: number) {
+    z = clampZoom(z);
+    const s = this.d.scroller;
+    const sizer = this.d.page.parentElement;
+    if (!sizer) return;
+    const z0 = useUI.getState().zoom;
+    const left0 = this.d.page.offsetLeft;
+    // the size of the content in page units (what the sizer is set to, without the visible-area minimum)
+    const contentW = (parseFloat(sizer.style.width) - left0) / z0;
+    const contentH = parseFloat(sizer.style.height) / z0;
+    // a PDF sits in the middle while it is narrower than the view (see PageView)
+    const left = usePage.getState().kind === 'pdf' ? Math.max(0, Math.floor((s.offsetWidth - contentW * z) / 2)) : 0;
+    const sr = s.getBoundingClientRect();
+    const vx = cx - sr.left - s.clientLeft;
+    const vy = cy - sr.top - s.clientTop;
+    // the scroll position the page will have at zoom z, limited like the real one
+    const maxX = Math.max(0, Math.max(left + contentW * z, s.clientWidth) - s.clientWidth);
+    const maxY = Math.max(0, Math.max(contentH * z, s.clientHeight) - s.clientHeight);
+    const sx = Math.min(maxX, Math.max(0, left + px * z - vx));
+    const sy = Math.min(maxY, Math.max(0, py * z - vy));
+    const k = z / z0;
+    const tx = s.scrollLeft - sx + left - k * left0;
+    const ty = s.scrollTop - sy;
+    sizer.style.transformOrigin = '0 0';
+    sizer.style.transform = `translate(${tx}px, ${ty}px) scale(${k})`;
+    this.preview = { z, cx, cy, px, py };
+    // strokes on the native layer would stay where they are
+    nativeInk.clearIfShowing();
+  }
+
+  /** Ends a zoom preview: sets the zoom and the scroll position in the same frame. */
+  private commitZoom() {
+    if (this.wheelTimer) clearTimeout(this.wheelTimer);
+    this.wheelTimer = null;
+    const p = this.preview;
+    if (!p) return;
+    const sizer = this.d.page.parentElement;
+    if (sizer) sizer.style.transform = '';
+    this.zoomAt(p.z, p.cx, p.cy, p.px, p.py);
   }
 
   private onWheel = (e: WheelEvent) => {
@@ -943,7 +1097,9 @@ export class CanvasController {
     e.preventDefault();
     const p = this.toPage(e.clientX, e.clientY);
     const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0025));
-    this.zoomAt(this.zoom * factor, e.clientX, e.clientY, p.x, p.y);
+    this.previewZoom(this.zoom * factor, e.clientX, e.clientY, p.x, p.y);
+    if (this.wheelTimer) clearTimeout(this.wheelTimer);
+    this.wheelTimer = setTimeout(() => this.commitZoom(), WHEEL_ZOOM_COMMIT_MS);
   };
 
   private onClickCapture = (e: MouseEvent) => {
@@ -1052,6 +1208,7 @@ export class CanvasController {
         break;
       }
       case 'erase':
+        this.flushErase(g);
         this.drawEraserCursor(g.x, g.y, g.r);
         break;
       case 'lasso': {
