@@ -27,6 +27,7 @@ import { openMenu } from '../Dialogs';
 import { ImageView } from './ImageView';
 import { InkLayer } from './InkLayer';
 import { PdfPages } from './PdfPages';
+import { PdfScrollbar } from './PdfScrollbar';
 import { duplicateSelection, SelectionOverlay } from './SelectionOverlay';
 import { TextContainer } from './TextContainer';
 
@@ -643,6 +644,7 @@ export function PageView() {
         </div>
       </div>
       <canvas ref={canvasRef} className="live-ink" />
+      {pdf && layout && <PdfScrollbar scroller={scrollerRef.current} slots={layout.slots} zoom={zoom} />}
       {pdf && <PdfStatus doc={pdf} />}
       {zoom !== 1 && (
         <button type="button" className="zoom-badge" onClick={() => useUI.getState().setZoom(1)} title="Zoom zurücksetzen">

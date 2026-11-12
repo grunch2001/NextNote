@@ -540,3 +540,132 @@
   line-height: 1.4;
   box-shadow: var(--shadow);
 }
+
+/* ------------------------------------------------------------------ PDF scroll bar */
+
+/* the PDF has its own scroll bar on the right (PdfScrollbar), the horizontal one stays */
+.pdf-view .page-scroller::-webkit-scrollbar {
+  width: 0;
+  height: 10px;
+}
+
+.pdf-view .page-scroller::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 5px;
+}
+
+.pdf-view .page-scroller::-webkit-scrollbar-track,
+.pdf-view .page-scroller::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.pdf-scrollbar {
+  --sb-track: #eeeeee;
+  --sb-track-line: #cfcfcf;
+  --sb-thumb: #ffffff;
+  --sb-thumb-line: #c4c4c4;
+  --sb-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  position: absolute;
+  top: 14px;
+  right: max(2px, var(--safe-right));
+  bottom: 50px;
+  z-index: 12;
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 400ms ease-in;
+}
+
+[data-theme='dark'] .pdf-scrollbar {
+  --sb-track: #5f5f5f;
+  --sb-track-line: #5f5f5f;
+  --sb-thumb: #6c6c6c;
+  --sb-thumb-line: #7a7a7a;
+  --sb-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.pdf-scrollbar.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 150ms ease-out;
+}
+
+.pdf-scrollbar-track {
+  position: relative;
+  flex: 1;
+  width: 12px;
+  border-radius: 6px;
+  background: var(--sb-track);
+  box-shadow: inset 0 0 0 1px var(--sb-track-line);
+}
+
+.pdf-scrollbar-thumb {
+  position: absolute;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  border-radius: 50%;
+  background: var(--sb-thumb);
+  box-shadow: inset 0 0 0 1px var(--sb-thumb-line), var(--sb-thumb-shadow);
+  transition: transform 120ms ease-out;
+}
+
+.pdf-scrollbar.dragging .pdf-scrollbar-thumb {
+  transform: scale(1.15);
+}
+
+.pdf-scrollbar-page {
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+
+.pdf-scrollbar.dragging .pdf-scrollbar-page {
+  transform: translateY(-50%) scale(calc(1 / 1.15));
+  transform-origin: right center;
+}
+
+.pdf-scrollbar-total {
+  min-width: 26px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdf-scrollbar,
+  .pdf-scrollbar.visible,
+  .pdf-scrollbar-thumb {
+    transition: none;
+  }
+}
