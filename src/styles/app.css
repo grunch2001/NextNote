@@ -830,10 +830,11 @@ button:disabled {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  align-items: center;
+  /* the button sits exactly where the collapse button of the open pane was */
+  align-items: flex-start;
   gap: 4px;
   width: 36px;
-  padding: 4px 0;
+  padding: 4px;
   background: var(--pages-bg);
   border-right: 1px solid var(--border);
   user-select: none;
