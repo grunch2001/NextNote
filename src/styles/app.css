@@ -249,10 +249,6 @@ button:disabled {
   font-weight: 600;
 }
 
-.tab.file {
-  font-weight: 600;
-}
-
 .tab.contextual {
   color: #ffe08a;
 }

@@ -133,7 +133,7 @@ Alternativ kannst du im Reiter **App-Passwort** Benutzernamen und ein in Nextclo
 
 ## Von OneNote umziehen
 
-Die Windows-App übernimmt Notizbücher, die in OneDrive liegen, über die offizielle OneNote-Schnittstelle von Microsoft (Microsoft Graph): **Datei → Importieren → Aus OneNote importieren …** oder der entsprechende Knopf auf dem Startbildschirm. Die Notizbücher werden als neue NextNote-Notizbücher angelegt und danach wie gewohnt mit Nextcloud synchronisiert, auch aufs Tablet. Dein OneNote bleibt unverändert.
+Die Windows-App übernimmt Notizbücher, die in OneDrive liegen, über die offizielle OneNote-Schnittstelle von Microsoft (Microsoft Graph): **Einstellungen (Zahnrad oben rechts) → Importieren → Aus OneNote importieren …** oder der entsprechende Knopf auf dem Startbildschirm. Die Notizbücher werden als neue NextNote-Notizbücher angelegt und danach wie gewohnt mit Nextcloud synchronisiert, auch aufs Tablet. Dein OneNote bleibt unverändert.
 
 Dafür braucht NextNote einmalig eine eigene **App-Registrierung bei Microsoft**. Sie ist kostenlos und dauert ein paar Minuten:
 

@@ -81,9 +81,6 @@ export function TopBar() {
         </svg>
       </div>
       <nav className="tabs" role="tablist" aria-label="Menüband-Reiter">
-        <button type="button" role="tab" className="tab file" onClick={() => useUI.setState({ settingsOpen: true })}>
-          Datei
-        </button>
         {TABS.map((t) => (
           <button
             key={t.id}
