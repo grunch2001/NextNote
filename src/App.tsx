@@ -205,10 +205,9 @@ export function App() {
           <>
             {narrow && navOpen && <div className="drawer-backdrop" onClick={() => useUI.setState({ navOpen: false })} />}
             <div className={`panes${navOpen ? ' open' : ''}${narrow ? ' drawer' : ''}`}>
-              {!narrow && !navOpen && <PaneRail nav pages={!pagesOpen} />}
+              {!narrow && !navOpen && <PaneRail />}
               {(navOpen || narrow) && <NavPane />}
               {(pagesOpen || narrow) && (navOpen || !narrow) && <PageList />}
-              {!narrow && navOpen && !pagesOpen && <PaneRail pages />}
             </div>
             <PageView />
             {searchOpen && <SearchPanel />}

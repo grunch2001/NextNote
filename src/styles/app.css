@@ -818,6 +818,8 @@ button:disabled {
 .pane-foot {
   display: flex;
   align-items: center;
+  /* same height with and without the collapse button */
+  min-height: 37px;
   padding: 4px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
@@ -844,6 +846,9 @@ button:disabled {
 @media (pointer: coarse) {
   .pane-rail {
     width: 42px;
+  }
+  .pane-foot {
+    min-height: 43px;
   }
 }
 
